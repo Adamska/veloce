@@ -4,4 +4,6 @@ pub mod demo;
 pub mod engine;
 pub mod gpu;
 pub mod media;
+pub mod player;
+pub mod subtitles;
 pub mod ui;
