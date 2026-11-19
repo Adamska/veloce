@@ -1,0 +1,30 @@
+[package]
+name = "veloce"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "GPU-accelerated native media player built for instant scrubbing and variable-speed playback"
+license = "MIT"
+repository = "https://github.com/Adamska/veloce"
+readme = "README.md"
+
+[dependencies]
+anyhow = "1.0.104"
+egui = "0.37.0"
+egui-wgpu = "0.37.0"
+egui-winit = "0.37.0"
+env_logger = "0.11.11"
+log = "0.4.35"
+pollster = "1.0.3"
+wgpu = "30"
+winit = "0.30"
+
+[profile.dev]
+opt-level = 2
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

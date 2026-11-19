@@ -1,0 +1,10 @@
+/target
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+CLAUDE.md
+.claude/
+.cursorrules
+AGENTS.md
