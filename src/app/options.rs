@@ -51,6 +51,7 @@ impl Options {
                         _ => bail!("--cache-mb expects a size of at least 64"),
                     }
                 }
+                serial if serial.starts_with("-psn_") => {}
                 flag if flag.starts_with("--") => bail!("unknown option {flag}"),
                 _ => options.locations.push(argument),
             }
@@ -93,6 +94,7 @@ mod tests {
     #[test]
     fn rejects_unknown_flags_and_bad_budgets() {
         assert!(parse(&["--fast"]).is_err());
+        assert!(parse(&["-psn_0_12345"]).is_ok_and(|options| options.locations.is_empty()));
         assert!(parse(&["--cache-mb", "abc"]).is_err());
         assert!(parse(&["--cache-mb", "8"]).is_err());
     }

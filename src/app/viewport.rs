@@ -12,7 +12,7 @@ use winit::{
     window::{Fullscreen, Window},
 };
 
-use super::{files, options::Options};
+use super::{AppEvent, files, options::Options};
 use crate::{
     gpu::{GpuContext, VideoPipeline, snapshot},
     player::{Command, Player},
@@ -29,7 +29,7 @@ pub struct Viewport {
     pub(super) video: VideoPipeline,
     snapshot_pipeline: Option<VideoPipeline>,
     pub(super) snapshots: (Sender<Result<PathBuf>>, Receiver<Result<PathBuf>>),
-    waker: EventLoopProxy<()>,
+    waker: EventLoopProxy<AppEvent>,
     pub(super) player: Player,
     pub(super) interface: Interface,
     pub(super) next_repaint: Option<Instant>,
@@ -59,7 +59,7 @@ impl Viewport {
     pub fn new(
         event_loop: &ActiveEventLoop,
         options: &Options,
-        waker: EventLoopProxy<()>,
+        waker: EventLoopProxy<AppEvent>,
     ) -> Result<Self> {
         let window = Arc::new(event_loop.create_window(window_attributes())?);
         let gpu = GpuContext::new(window.clone())?;
@@ -154,7 +154,7 @@ impl Viewport {
                 let (results, waker) = (self.snapshots.0.clone(), self.waker.clone());
                 std::thread::spawn(move || {
                     let _ = results.send(image.save_png(&path).map(|()| path));
-                    let _ = waker.send_event(());
+                    let _ = waker.send_event(AppEvent::Redraw);
                 });
             }
             Err(error) => self

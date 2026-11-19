@@ -56,6 +56,19 @@ cargo run --release -- https://example.com/live/index.m3u8
 
 Files can also be dropped onto the window. Dropping media replaces the queue, or appends to it while the playlist drawer is open. Dropping an `.srt`, `.vtt` or `.ass` file loads it as a subtitle track. Subtitle files that share the media file name are picked up automatically.
 
+### macOS app
+
+```sh
+scripts/macos/bundle.sh             # builds target/release/bundle/Veloce.app
+scripts/macos/bundle.sh --install   # also installs to /Applications and registers it with Finder
+```
+
+The installed app appears in Launchpad and Spotlight, and in Finder's **Open With** menu for video and audio files, including MKV, WebM, AVI, FLV and FLAC. Files can be dropped on the Dock icon. Opening a file while Veloce is running plays it in the existing window.
+
+To make Veloce the default player for a format, select a file of that type in Finder, choose **File > Get Info**, pick Veloce under **Open with** and click **Change All**.
+
+The bundle links the FFmpeg libraries installed by Homebrew and is signed ad hoc, so it is meant for the machine that built it. Running the script again replaces the installed copy; quit Veloce first. To uninstall, delete `/Applications/Veloce.app`.
+
 ## Keyboard map
 
 | Key | Action |
@@ -181,7 +194,7 @@ After a seek the clock holds the target until audio belonging to the new epoch i
 | `src/subtitles` | SRT, VTT and ASS parsing, time-indexed tracks, overlay renderer |
 | `src/player` | Sessions, commands, transport, playlist, subtitle state, frame selection |
 | `src/ui` | Control capsule, scrubber, drawers, inspector, toasts, theme |
-| `src/app` | Window, event loop, keyboard map, file handling |
+| `src/app` | Window, event loop, keyboard map, file handling, macOS document events |
 
 ## Performance
 

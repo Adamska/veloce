@@ -1,10 +1,12 @@
 mod files;
 mod frame;
 mod input;
+#[cfg(target_os = "macos")]
+mod macos;
 mod options;
 mod viewport;
 
-use std::{ffi::OsString, time::Instant};
+use std::{ffi::OsString, path::PathBuf, time::Instant};
 
 use anyhow::Result;
 use winit::{
@@ -19,6 +21,12 @@ use crate::engine::ffmpeg_source;
 use options::Options;
 use viewport::Viewport;
 
+#[derive(Debug)]
+pub enum AppEvent {
+    Redraw,
+    Open(Vec<String>),
+}
+
 pub fn run(arguments: Vec<OsString>) -> Result<()> {
     let options = Options::parse(arguments)?;
     if options.show_help {
@@ -30,7 +38,9 @@ pub fn run(arguments: Vec<OsString>) -> Result<()> {
         return Ok(());
     }
     ffmpeg_source::initialize()?;
-    let event_loop = EventLoop::<()>::with_user_event().build()?;
+    let event_loop = EventLoop::<AppEvent>::with_user_event().build()?;
+    #[cfg(target_os = "macos")]
+    macos::install_document_handler(event_loop.create_proxy());
     let mut app = App {
         options,
         waker: event_loop.create_proxy(),
@@ -43,12 +53,12 @@ pub fn run(arguments: Vec<OsString>) -> Result<()> {
 
 struct App {
     options: Options,
-    waker: EventLoopProxy<()>,
+    waker: EventLoopProxy<AppEvent>,
     viewport: Option<Viewport>,
     modifiers: ModifiersState,
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler<AppEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.viewport.is_some() {
             return;
@@ -62,9 +72,18 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
-        if let Some(viewport) = self.viewport.as_ref() {
-            viewport.window.request_redraw();
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: AppEvent) {
+        match (event, self.viewport.as_mut()) {
+            (AppEvent::Open(paths), Some(viewport)) => {
+                viewport
+                    .dropped
+                    .extend(paths.into_iter().map(PathBuf::from));
+                viewport.window.focus_window();
+                viewport.window.request_redraw();
+            }
+            (AppEvent::Open(paths), None) => self.options.locations.extend(paths),
+            (AppEvent::Redraw, Some(viewport)) => viewport.window.request_redraw(),
+            (AppEvent::Redraw, None) => {}
         }
     }
 
