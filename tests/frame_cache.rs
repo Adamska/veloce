@@ -4,7 +4,7 @@ use std::{
 };
 
 use veloce::{
-    engine::{CacheLimits, FrameCache, SeekOutcome, SessionShared, pipeline},
+    engine::{CacheLimits, FrameCache, SeekOutcome, SessionShared, pipeline, speculation},
     media::{
         BufferPool, ColorInfo, MICROS_PER_SECOND, MediaInfo, MediaSource, Micros, PixelLayout,
         PooledPlanes, SourceEvent, VideoFrame, VideoStreamInfo,
@@ -32,6 +32,7 @@ fn limits(budget_frames: usize) -> CacheLimits {
     CacheLimits {
         behind: 10 * MICROS_PER_SECOND,
         ahead: 25 * MICROS_PER_SECOND,
+        guaranteed_ahead: 1_500_000,
         budget_bytes: budget_frames * 64 * 32 * 3 / 2,
     }
 }
@@ -86,7 +87,7 @@ fn memory_budget_bounds_both_sides_of_the_window() {
     assert!(!cache.wants_more(0));
     cache.trim(40 * FRAME);
     let span = cache.span().expect("cache is populated");
-    assert_eq!(span.start, 20 * FRAME);
+    assert_eq!(span.start, 5 * FRAME);
     assert!(cache.wants_more(40 * FRAME));
 }
 
@@ -213,4 +214,90 @@ fn seeks_inside_the_window_never_flush_and_bursts_outside_coalesce() {
 
     shared.stop();
     worker.join().expect("decode thread exits cleanly");
+}
+
+fn scripted(seeks: &Arc<std::sync::Mutex<Vec<Micros>>>) -> pipeline::SourceFactory {
+    let seeks = seeks.clone();
+    Box::new(move || {
+        Ok(Box::new(ScriptedSource {
+            info: MediaInfo {
+                video: Some(VideoStreamInfo::default()),
+                ..MediaInfo::default()
+            },
+            pool: Arc::default(),
+            next: 0,
+            seeks,
+        }))
+    })
+}
+
+fn assert_exact(shared: &SessionShared, target: Micros) {
+    let frame = shared
+        .cache
+        .frame_at(target)
+        .expect("a frame covers the target");
+    assert!(
+        frame.pts <= target && target < frame.end(),
+        "{} for {target}",
+        frame.pts
+    );
+    assert!(shared.cache.is_contiguous(0), "the window has a gap");
+}
+
+#[test]
+fn repeated_hops_are_served_by_prepared_frames_in_both_directions() {
+    let spare = 4;
+    let shared = Arc::new(SessionShared::with_spare_lanes(
+        limits(4_000),
+        48_000,
+        0,
+        spare,
+    ));
+    let seeks = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let (events, _inbox) = crossbeam_channel::unbounded();
+    let mut workers = vec![
+        pipeline::spawn(shared.clone(), scripted(&seeks), events.clone()).expect("lane starts"),
+    ];
+    for lane in 1..=spare {
+        workers.push(
+            speculation::spawn_spare(shared.clone(), lane, scripted(&seeks), events.clone())
+                .expect("lane starts"),
+        );
+    }
+    let start = 600 * MICROS_PER_SECOND + 7 * FRAME + 1_234;
+    let (_, epoch) = shared.seek(start);
+    wait_until(|| shared.is_ready(epoch));
+    assert_exact(&shared, start);
+
+    let mut position = start;
+    for stride in [5, 5, 5, 5, 5, 5, -5, -5, -5, -5, 30, 30, 30, 30] {
+        thread_sleep(150);
+        let stride = stride * MICROS_PER_SECOND;
+        position += stride;
+        let (_, epoch) = shared.hop(position, stride);
+        wait_until(|| shared.is_ready(epoch));
+        assert_exact(&shared, position);
+    }
+    let telemetry = shared.telemetry.snapshot();
+    assert!(
+        telemetry.seeks_hit >= 12 && telemetry.seeks_prepared >= 4 && telemetry.seeks_missed <= 3,
+        "{} hits, {} prepared, {} misses",
+        telemetry.seeks_hit,
+        telemetry.seeks_prepared,
+        telemetry.seeks_missed
+    );
+
+    thread_sleep(150);
+    let reload = shared.reload(position);
+    wait_until(|| shared.is_ready(reload));
+    assert_exact(&shared, position);
+
+    shared.stop();
+    for worker in workers {
+        worker.join().expect("lane exits cleanly");
+    }
+}
+
+fn thread_sleep(millis: u64) {
+    std::thread::sleep(Duration::from_millis(millis));
 }

@@ -163,3 +163,47 @@ fn loop_points_delays_and_tracks_respond_to_commands() {
     assert!(!player.has_session());
     assert!(player.update(REFRESH).is_none());
 }
+
+#[test]
+fn held_seek_keys_show_the_exact_frame_for_every_press() {
+    let mut player = silent_player();
+    player.execute(Command::OpenDemo);
+    pump(&mut player, |player, frame| {
+        player.position() > 300_000 && shows(player.position(), frame)
+    });
+
+    let mut prompt = 0;
+    let strides = [5, 5, 5, 5, 5, 5, 5, 5, -5, -5, -5, -5, 30, 30, 30, 30];
+    for stride in strides {
+        let before = player.position();
+        player.execute(Command::SeekBy(stride * MICROS_PER_SECOND));
+        let target = player.position();
+        assert_eq!(target, before + stride * MICROS_PER_SECOND);
+        let pressed = Instant::now();
+        let mut shown_after = None;
+        while pressed.elapsed() < Duration::from_millis(90) {
+            let selection = player.update(REFRESH);
+            if shown_after.is_none() && shows(target, selection.as_ref()) {
+                shown_after = Some(pressed.elapsed());
+            }
+            thread::sleep(Duration::from_millis(4));
+        }
+        prompt += usize::from(shown_after.is_some_and(|wait| wait < Duration::from_millis(30)));
+    }
+    assert!(
+        prompt >= 13,
+        "only {prompt} of {} presses were prompt",
+        strides.len()
+    );
+
+    let landed = player.position();
+    pump(&mut player, |player, frame| {
+        player.position() > landed + 300_000 && shows(player.position(), frame)
+    });
+    let telemetry = player.telemetry().expect("session telemetry");
+    assert!(
+        telemetry.seeks_prepared >= 8,
+        "{} prepared",
+        telemetry.seeks_prepared
+    );
+}

@@ -64,7 +64,7 @@ impl Player {
             }
             Command::TogglePause if self.session.is_some() => self.set_paused(!self.paused),
             Command::TogglePause => {}
-            Command::SeekBy(delta) => self.seek_to(self.position + delta),
+            Command::SeekBy(delta) => self.seek_by(delta),
             Command::SeekTo(target) => self.seek_to(target),
             Command::StepFrame { forward } => self.step_frame(forward),
             Command::SetSpeed(speed) => self.set_speed(speed),

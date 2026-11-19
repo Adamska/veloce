@@ -15,6 +15,7 @@ const PREROLL_KEEP: Micros = 250_000;
 pub struct OpenOptions {
     pub sample_rate: u32,
     pub norm16_textures: bool,
+    pub decode_threads: usize,
 }
 
 pub struct FfmpegSource {
@@ -52,7 +53,13 @@ impl FfmpegSource {
                     .video
                     .as_ref()
                     .map_or(0.0, |video| video.frame_rate);
-                match VideoDecoder::open(&stream, start_offset, rate, options.norm16_textures) {
+                match VideoDecoder::open(
+                    &stream,
+                    start_offset,
+                    rate,
+                    options.norm16_textures,
+                    options.decode_threads,
+                ) {
                     Ok(decoder) => Some(decoder),
                     Err(error) => {
                         log::warn!("video stream disabled: {error:#}");

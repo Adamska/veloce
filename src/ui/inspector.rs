@@ -124,8 +124,11 @@ pub fn show(ctx: &egui::Context, view: &ViewContext<'_>) {
                 value_row(ui, "seek hit rate", hit_rate);
                 value_row(
                     ui,
-                    "hits / misses",
-                    format!("{} / {}", telemetry.seeks_hit, telemetry.seeks_missed),
+                    "hits (prepared) / misses",
+                    format!(
+                        "{} ({}) / {}",
+                        telemetry.seeks_hit, telemetry.seeks_prepared, telemetry.seeks_missed
+                    ),
                 );
                 value_row(
                     ui,

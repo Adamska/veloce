@@ -9,7 +9,9 @@ use veloce::{
     demo::SyntheticSource,
     engine::{
         CacheLimits, FfmpegSource, OpenOptions, PipelineEvent, SeekOutcome, SessionShared,
-        ffmpeg_source, pipeline,
+        SourceFactory, ffmpeg_source,
+        lanes::{self, SPARE_LANES},
+        pipeline, speculation,
     },
     media::{MICROS_PER_SECOND, MediaInfo, MediaSource, Micros},
 };
@@ -17,8 +19,7 @@ use veloce::{
 const SAMPLE_RATE: u32 = 48_000;
 const IN_WINDOW_SEEKS: usize = 10_000;
 const FAR_SEEKS: Micros = 12;
-const BURST_SEEKS: Micros = 40;
-const KEY_REPEAT: Duration = Duration::from_millis(15);
+const HOPS: usize = 40;
 
 fn wait_for(what: &str, limit: Duration, condition: impl Fn() -> bool) -> Result<Duration> {
     let started = Instant::now();
@@ -35,24 +36,33 @@ fn percentile(sorted: &[Duration], fraction: f64) -> Duration {
     sorted[((sorted.len() - 1) as f64 * fraction) as usize]
 }
 
-fn open(location: Option<String>, shared: &Arc<SessionShared>) -> Result<MediaInfo> {
+fn factory(location: &Option<String>, shared: &Arc<SessionShared>, lane: usize) -> SourceFactory {
+    let (location, cancel) = (location.clone(), shared.clone());
+    Box::new(move || match location {
+        Some(location) => {
+            let options = OpenOptions {
+                sample_rate: SAMPLE_RATE,
+                norm16_textures: true,
+                decode_threads: lanes::decode_threads(lane),
+            };
+            let source = FfmpegSource::open(&location, options, move || cancel.is_stopped())?;
+            Ok(Box::new(source) as Box<dyn MediaSource>)
+        }
+        None => Ok(Box::new(SyntheticSource::new(SAMPLE_RATE)) as Box<dyn MediaSource>),
+    })
+}
+
+fn open(location: &Option<String>, shared: &Arc<SessionShared>, spare: usize) -> Result<MediaInfo> {
     let (events, inbox) = crossbeam_channel::unbounded();
-    let cancel = shared.clone();
-    pipeline::spawn(
-        shared.clone(),
-        Box::new(move || match location {
-            Some(location) => {
-                let options = OpenOptions {
-                    sample_rate: SAMPLE_RATE,
-                    norm16_textures: true,
-                };
-                let source = FfmpegSource::open(&location, options, move || cancel.is_stopped())?;
-                Ok(Box::new(source) as Box<dyn MediaSource>)
-            }
-            None => Ok(Box::new(SyntheticSource::new(SAMPLE_RATE)) as Box<dyn MediaSource>),
-        }),
-        events,
-    )?;
+    pipeline::spawn(shared.clone(), factory(location, shared, 0), events.clone())?;
+    for lane in 1..=spare {
+        speculation::spawn_spare(
+            shared.clone(),
+            lane,
+            factory(location, shared, lane),
+            events.clone(),
+        )?;
+    }
     match inbox.recv_timeout(Duration::from_secs(30)) {
         Ok(PipelineEvent::Opened(info)) => Ok(*info),
         Ok(PipelineEvent::Failed(message)) => bail!(message),
@@ -60,26 +70,83 @@ fn open(location: Option<String>, shared: &Arc<SessionShared>) -> Result<MediaIn
     }
 }
 
+fn hop_run(
+    shared: &SessionShared,
+    start: Micros,
+    stride: Micros,
+    hops: usize,
+    interval: Duration,
+) -> Result<()> {
+    let (_, epoch) = shared.seek(start);
+    wait_for("the starting position", Duration::from_secs(30), || {
+        shared.is_ready(epoch)
+    })?;
+    thread::sleep(Duration::from_millis(600));
+    let (mut position, mut instant, mut late) = (start, 0, 0);
+    let mut waits = Vec::new();
+    let mut last_epoch = epoch;
+    for _ in 0..hops {
+        position += stride;
+        let pressed = Instant::now();
+        let (outcome, epoch) = shared.hop(position, stride);
+        last_epoch = epoch;
+        if outcome == SeekOutcome::Hit {
+            instant += 1;
+        }
+        while pressed.elapsed() < interval {
+            if shared.is_ready(epoch)
+                && let Some(frame) = shared.cache.frame_at(position)
+            {
+                if frame.pts > position || position >= frame.end() + 2_000 {
+                    bail!("hop to {position} showed the frame at {}", frame.pts);
+                }
+                waits.push(pressed.elapsed());
+                break;
+            }
+            thread::sleep(Duration::from_micros(200));
+        }
+        late += usize::from(!shared.is_ready(epoch));
+        thread::sleep(interval.saturating_sub(pressed.elapsed()));
+    }
+    wait_for("the last hop", Duration::from_secs(30), || {
+        shared.is_ready(last_epoch)
+    })?;
+    waits.sort_unstable();
+    println!(
+        "{:+4} s x{hops} every {:>3} ms: {instant:>2} instant, {late:>2} not shown before the next press, median {:?}, slowest {:?}",
+        stride / MICROS_PER_SECOND,
+        interval.as_millis(),
+        waits.get(waits.len() / 2).copied().unwrap_or_default(),
+        waits.last().copied().unwrap_or_default(),
+    );
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let mut location = None;
     let mut limits = CacheLimits::default();
+    let mut spare = SPARE_LANES;
     let mut arguments = std::env::args().skip(1);
+    let number = |value: Option<String>| value.and_then(|value| value.parse::<usize>().ok());
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--demo" => location = None,
             "--cache-mb" => {
-                let megabytes: usize = arguments
-                    .next()
-                    .and_then(|value| value.parse().ok())
-                    .context("--cache-mb expects a number")?;
+                let megabytes = number(arguments.next()).context("--cache-mb expects a number")?;
                 limits.budget_bytes = megabytes * 1024 * 1024;
             }
+            "--lanes" => spare = number(arguments.next()).context("--lanes expects a number")?,
             _ => location = Some(argument),
         }
     }
     ffmpeg_source::initialize()?;
-    let shared = Arc::new(SessionShared::new(limits, SAMPLE_RATE, 0));
-    let info = open(location, &shared)?;
+    let shared = Arc::new(SessionShared::with_spare_lanes(
+        limits,
+        SAMPLE_RATE,
+        0,
+        spare,
+    ));
+    let info = open(&location, &shared, spare)?;
     let video = info
         .video
         .as_ref()
@@ -87,7 +154,7 @@ fn main() -> Result<()> {
     let duration = info.duration.context("the source has no known duration")?;
     println!("source        {} ({})", info.title, info.container);
     println!(
-        "video         {} {}x{} @ {:.2} fps",
+        "video         {} {}x{} @ {:.2} fps, {spare} speculative decoders",
         video.codec, video.width, video.height, video.frame_rate
     );
 
@@ -96,23 +163,21 @@ fn main() -> Result<()> {
     })?;
     let span = shared.cache.span().context("no frames were decoded")?;
     let telemetry = shared.telemetry.snapshot();
-    let decode_rate = telemetry.decoded_frames as f64 / fill.as_secs_f64();
+    let rate = telemetry.decoded_frames as f64 / fill.as_secs_f64();
     println!("decoder       {}", telemetry.backend);
     println!(
-        "window        {:.1} s ahead, {} frames, {:.0} MiB of {:.0} MiB",
+        "window        {:.1} s ahead, {} frames, {:.0} MiB",
         (span.end - span.start) as f64 / 1e6,
         span.frames,
-        span.bytes as f64 / 1_048_576.0,
-        limits.budget_bytes as f64 / 1_048_576.0
+        span.bytes as f64 / 1_048_576.0
     );
     println!(
-        "fill rate     {decode_rate:.0} fps ({:.1}x realtime)",
-        decode_rate / video.frame_rate.max(1.0)
+        "fill rate     {rate:.0} fps ({:.1}x realtime)",
+        rate / video.frame_rate.max(1.0)
     );
 
     let hop = (5 * MICROS_PER_SECOND).min((span.end - span.start) / 3);
     let base = span.start + hop / 2;
-    let flushes = shared.telemetry.snapshot().decode_flushes;
     let mut latencies = Vec::with_capacity(IN_WINDOW_SEEKS);
     for step in 0..IN_WINDOW_SEEKS {
         let target = base + if step % 2 == 0 { hop } else { 0 };
@@ -126,12 +191,9 @@ fn main() -> Result<()> {
     }
     latencies.sort_unstable();
     println!(
-        "in-window     {IN_WINDOW_SEEKS} seeks of {:.1} s: median {:?}, p99 {:?}, max {:?}, {} decoder flushes",
-        hop as f64 / 1e6,
+        "in-window     {IN_WINDOW_SEEKS} seeks: median {:?}, p99 {:?}",
         percentile(&latencies, 0.5),
-        percentile(&latencies, 0.99),
-        percentile(&latencies, 1.0),
-        shared.telemetry.snapshot().decode_flushes - flushes
+        percentile(&latencies, 0.99)
     );
 
     let mut misses = Vec::new();
@@ -139,45 +201,34 @@ fn main() -> Result<()> {
         let target = duration * ((step * 5) % (FAR_SEEKS + 1)) / (FAR_SEEKS + 1);
         let started = Instant::now();
         let (outcome, epoch) = shared.seek(target);
-        if outcome == SeekOutcome::Hit {
-            continue;
+        if outcome == SeekOutcome::Miss {
+            wait_for("a far seek", Duration::from_secs(30), || {
+                shared.is_ready(epoch)
+            })?;
+            misses.push(started.elapsed());
         }
-        wait_for("an out-of-window seek", Duration::from_secs(30), || {
-            shared.is_ready(epoch)
-        })?;
-        misses.push(started.elapsed());
     }
     misses.sort_unstable();
     if !misses.is_empty() {
         println!(
-            "out-of-window {} seeks: median {:?}, slowest {:?}",
+            "random seeks  {} cold: median {:?}, slowest {:?}",
             misses.len(),
             percentile(&misses, 0.5),
             percentile(&misses, 1.0)
         );
     }
 
-    let before = shared.telemetry.snapshot();
-    let started = Instant::now();
-    let mut last_epoch = 0;
-    for step in 1..=BURST_SEEKS {
-        let target = (step * 30 * MICROS_PER_SECOND) % (duration - MICROS_PER_SECOND).max(1);
-        last_epoch = shared.seek(target).1;
-        thread::sleep(KEY_REPEAT);
+    let second = MICROS_PER_SECOND;
+    for (stride, millis) in [(5, 90), (5, 33), (-5, 90), (30, 90), (30, 33)] {
+        let stride = stride * second;
+        let hops = HOPS.min(((duration - 4 * second) / stride.abs()) as usize);
+        let start = if stride > 0 {
+            second
+        } else {
+            duration - 2 * second
+        };
+        hop_run(&shared, start, stride, hops, Duration::from_millis(millis))?;
     }
-    wait_for("the burst to settle", Duration::from_secs(30), || {
-        shared.is_ready(last_epoch)
-    })?;
-    let after = shared.telemetry.snapshot();
-    println!(
-        "30 s key spam {BURST_SEEKS} seeks in {:?}: {} decoded to completion, {} preempted, {} merged",
-        started.elapsed(),
-        BURST_SEEKS as u64
-            - (after.seeks_superseded - before.seeks_superseded)
-            - (after.seeks_coalesced - before.seeks_coalesced),
-        after.seeks_superseded - before.seeks_superseded,
-        after.seeks_coalesced - before.seeks_coalesced
-    );
     shared.stop();
     Ok(())
 }

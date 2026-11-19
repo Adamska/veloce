@@ -4,15 +4,14 @@ use parking_lot::RwLock;
 
 use crate::media::{MICROS_PER_SECOND, Micros, VideoFrame};
 
-const BEHIND_SHARE: usize = 2;
-const AHEAD_SHARE: usize = 5;
 const DEFAULT_BUDGET_MB: usize = 3072;
-const GUARANTEED_AHEAD: Micros = 1_500_000;
+const HOP_RESERVE: Micros = 6 * MICROS_PER_SECOND;
 
 #[derive(Clone, Copy, Debug)]
 pub struct CacheLimits {
     pub behind: Micros,
     pub ahead: Micros,
+    pub guaranteed_ahead: Micros,
     pub budget_bytes: usize,
 }
 
@@ -26,6 +25,7 @@ impl Default for CacheLimits {
         Self {
             behind: 10 * MICROS_PER_SECOND,
             ahead: 25 * MICROS_PER_SECOND,
+            guaranteed_ahead: 1_500_000,
             budget_bytes: budget_mb * 1024 * 1024,
         }
     }
@@ -52,8 +52,20 @@ impl Inner {
             .checked_sub(1)
     }
 
-    fn frame_bytes(&self) -> usize {
-        (self.bytes / self.frames.len().max(1)).max(1)
+    fn capacities(&self, budget_bytes: usize) -> (usize, usize) {
+        let count = self.frames.len().max(1);
+        let capacity = budget_bytes / (self.bytes / count).max(1);
+        let duration = match (self.frames.front(), self.frames.back()) {
+            (Some(first), Some(last)) => (last.end() - first.pts).max(1),
+            _ => 1,
+        };
+        let reserve = (count as i128 * i128::from(HOP_RESERVE) / i128::from(duration)) as usize;
+        let behind = if capacity / 2 <= reserve {
+            capacity / 2
+        } else {
+            reserve.max(capacity * 2 / 7)
+        };
+        (behind.max(1), capacity.saturating_sub(behind).max(2))
     }
 }
 
@@ -123,6 +135,15 @@ impl FrameCache {
         last.saturating_sub(first)
     }
 
+    pub fn is_contiguous(&self, tolerance: Micros) -> bool {
+        let inner = self.inner.read();
+        inner
+            .frames
+            .iter()
+            .zip(inner.frames.iter().skip(1))
+            .all(|(earlier, later)| (later.pts - earlier.end()).abs() <= tolerance)
+    }
+
     pub fn span(&self) -> Option<CacheSpan> {
         let inner = self.inner.read();
         Some(CacheSpan {
@@ -141,21 +162,18 @@ impl FrameCache {
         if last.end() >= playhead + self.limits.ahead {
             return false;
         }
-        if last.end() < playhead + GUARANTEED_AHEAD {
+        if last.end() < playhead + self.limits.guaranteed_ahead {
             return true;
         }
         let ahead = inner.frames.len() - inner.index_at(playhead).map_or(0, |index| index + 1);
-        let capacity = self.limits.budget_bytes / inner.frame_bytes();
-        let ahead_capacity = (capacity * AHEAD_SHARE / (AHEAD_SHARE + BEHIND_SHARE)).max(2);
-        ahead < ahead_capacity
+        ahead < inner.capacities(self.limits.budget_bytes).1
     }
 
     pub fn trim(&self, playhead: Micros) {
         let mut evicted = Vec::new();
         {
             let mut inner = self.inner.write();
-            let capacity = self.limits.budget_bytes / inner.frame_bytes();
-            let behind_capacity = (capacity * BEHIND_SHARE / (AHEAD_SHARE + BEHIND_SHARE)).max(1);
+            let (behind_capacity, _) = inner.capacities(self.limits.budget_bytes);
             loop {
                 let behind = inner.index_at(playhead).unwrap_or(0);
                 let Some(first) = inner.frames.front() else {
@@ -175,11 +193,13 @@ impl FrameCache {
     }
 
     pub fn flush(&self) {
-        let evicted = {
-            let mut inner = self.inner.write();
-            inner.bytes = 0;
-            std::mem::take(&mut inner.frames)
-        };
+        let evicted = std::mem::take(&mut *self.inner.write());
         drop(evicted);
+    }
+
+    pub fn exchange(&self, other: &Self) {
+        if !std::ptr::eq(self, other) {
+            std::mem::swap(&mut *self.inner.write(), &mut *other.inner.write());
+        }
     }
 }

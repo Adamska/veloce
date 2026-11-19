@@ -29,13 +29,20 @@ pub struct HardwareDevice {
 
 unsafe impl Send for HardwareDevice {}
 
-pub fn is_enabled() -> bool {
-    !std::env::var("VELOCE_HWACCEL").is_ok_and(|value| {
-        matches!(
-            value.to_ascii_lowercase().as_str(),
-            "0" | "off" | "false" | "none"
-        )
-    })
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Preference {
+    Automatic,
+    Hardware,
+    Software,
+}
+
+pub fn preference() -> Preference {
+    let value = std::env::var("VELOCE_HWACCEL").unwrap_or_default();
+    match value.to_ascii_lowercase().as_str() {
+        "0" | "off" | "false" | "none" | "software" => Preference::Software,
+        "1" | "on" | "true" | "force" | "hardware" => Preference::Hardware,
+        _ => Preference::Automatic,
+    }
 }
 
 fn hardware_format(
@@ -54,9 +61,6 @@ fn hardware_format(
 
 impl HardwareDevice {
     pub fn open_for(codec: &ffmpeg::Codec) -> Option<Self> {
-        if !is_enabled() {
-            return None;
-        }
         CANDIDATES.iter().find_map(|(device_type, name)| {
             // SAFETY: the codec pointer comes from a live `Codec` handle.
             let pixel_format = hardware_format(unsafe { codec.as_ptr() }, *device_type)?;

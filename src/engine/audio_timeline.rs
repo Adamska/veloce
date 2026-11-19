@@ -131,6 +131,12 @@ impl AudioTimeline {
     pub fn flush(&self) {
         self.segments.write().clear();
     }
+
+    pub fn exchange(&self, other: &Self) {
+        if !std::ptr::eq(self, other) {
+            std::mem::swap(&mut *self.segments.write(), &mut *other.segments.write());
+        }
+    }
 }
 
 #[cfg(test)]

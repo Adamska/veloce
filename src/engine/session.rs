@@ -1,6 +1,6 @@
 use std::{
     sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use parking_lot::{Condvar, Mutex};
@@ -9,6 +9,7 @@ use super::{
     audio_timeline::AudioTimeline,
     clock::next_epoch,
     frame_cache::{CacheLimits, FrameCache},
+    lanes::{self, Lanes},
     telemetry::Telemetry,
 };
 use crate::media::Micros;
@@ -19,6 +20,7 @@ const NO_TRACK: i64 = -1;
 pub struct SeekRequest {
     pub target: Micros,
     pub epoch: u64,
+    pub resumed: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,31 +33,49 @@ pub struct SessionShared {
     pub cache: FrameCache,
     pub audio: AudioTimeline,
     pub telemetry: Telemetry,
-    pending: Mutex<Option<SeekRequest>>,
-    wake: Condvar,
-    epoch: AtomicU64,
+    pub(super) lanes: Lanes,
+    pub(super) pending: Mutex<Option<SeekRequest>>,
+    pub(super) wake: Condvar,
+    pub(super) epoch: AtomicU64,
     ready_epoch: AtomicU64,
     presented_epoch: AtomicU64,
-    target: AtomicI64,
-    playhead: AtomicI64,
+    pub(super) target: AtomicI64,
+    pub(super) playhead: AtomicI64,
     end_time: AtomicI64,
     audio_track: AtomicI64,
     has_video: AtomicBool,
-    end_of_stream: AtomicBool,
+    pub(super) end_of_stream: AtomicBool,
     stopped: AtomicBool,
 }
 
 impl SessionShared {
     pub fn new(limits: CacheLimits, sample_rate: u32, start: Micros) -> Self {
+        Self::with_spare_lanes(limits, sample_rate, start, 0)
+    }
+
+    pub fn with_spare_lanes(
+        limits: CacheLimits,
+        sample_rate: u32,
+        start: Micros,
+        spare: usize,
+    ) -> Self {
+        let pad_limits = lanes::pad_limits(&limits);
+        let main_limits = CacheLimits {
+            budget_bytes: limits.budget_bytes - spare * pad_limits.budget_bytes,
+            ..limits
+        };
         let epoch = next_epoch();
+        let request = SeekRequest {
+            target: start,
+            epoch,
+            resumed: false,
+        };
         Self {
-            cache: FrameCache::new(limits),
+            cache: FrameCache::new(main_limits),
             audio: AudioTimeline::new(sample_rate),
             telemetry: Telemetry::default(),
-            pending: Mutex::new(Some(SeekRequest {
-                target: start,
-                epoch,
-            })),
+            lanes: Lanes::new(spare, pad_limits, sample_rate),
+            pending: Mutex::new(Some(request)),
             wake: Condvar::new(),
             epoch: AtomicU64::new(epoch),
             ready_epoch: AtomicU64::new(0),
@@ -68,6 +88,10 @@ impl SessionShared {
             end_of_stream: AtomicBool::new(false),
             stopped: AtomicBool::new(false),
         }
+    }
+
+    pub fn lanes(&self) -> &Lanes {
+        &self.lanes
     }
 
     pub fn epoch(&self) -> u64 {
@@ -83,11 +107,16 @@ impl SessionShared {
         SeekRequest {
             target: self.target(),
             epoch: self.epoch(),
+            resumed: false,
         }
     }
 
     pub fn is_ready(&self, epoch: u64) -> bool {
         self.ready_epoch.load(Ordering::Acquire) == epoch
+    }
+
+    pub fn has_started(&self) -> bool {
+        self.ready_epoch.load(Ordering::Acquire) != 0
     }
 
     pub fn mark_ready(&self, epoch: u64) {
@@ -150,7 +179,7 @@ impl SessionShared {
         self.wake.notify_all();
     }
 
-    fn window_covers(&self, target: Micros) -> bool {
+    pub fn window_covers(&self, target: Micros) -> bool {
         if self.has_video() {
             self.cache.covers(target)
         } else {
@@ -158,59 +187,16 @@ impl SessionShared {
         }
     }
 
-    fn begin(&self, target: Micros, force_reload: bool) -> (SeekOutcome, u64) {
-        let started = Instant::now();
-        let mut pending = self.pending.lock();
-        let epoch = next_epoch();
-        self.target.store(target, Ordering::Release);
-        self.playhead.store(target, Ordering::Relaxed);
-        self.epoch.store(epoch, Ordering::Release);
-        let outcome = if !force_reload && self.window_covers(target) {
-            *pending = None;
-            self.mark_ready(epoch);
-            Telemetry::bump(&self.telemetry.seeks_hit);
-            SeekOutcome::Hit
-        } else {
-            if pending.is_some() {
-                Telemetry::bump(&self.telemetry.seeks_coalesced);
-            }
-            *pending = Some(SeekRequest { target, epoch });
-            Telemetry::bump(&self.telemetry.seeks_missed);
-            SeekOutcome::Miss
-        };
-        drop(pending);
-        self.telemetry
-            .last_resolve_nanos
-            .store(started.elapsed().as_nanos() as u64, Ordering::Relaxed);
-        self.wake.notify_all();
-        (outcome, epoch)
-    }
-
-    pub fn seek(&self, target: Micros) -> (SeekOutcome, u64) {
-        self.begin(target, false)
-    }
-
-    pub fn reload(&self, target: Micros) -> u64 {
-        self.begin(target, true).1
-    }
-
-    pub fn has_pending_seek(&self) -> bool {
-        self.pending.lock().is_some()
-    }
-
-    pub fn take_seek(&self) -> Option<SeekRequest> {
-        let mut pending = self.pending.lock();
-        let request = pending.take()?;
-        self.cache.flush();
-        self.audio.flush();
-        self.end_of_stream.store(false, Ordering::Release);
-        Telemetry::bump(&self.telemetry.decode_flushes);
-        Some(request)
-    }
-
     pub fn park(&self, timeout: Duration) {
         let mut pending = self.pending.lock();
         if pending.is_none() && !self.is_stopped() {
+            self.wake.wait_for(&mut pending, timeout);
+        }
+    }
+
+    pub fn nap(&self, timeout: Duration) {
+        let mut pending = self.pending.lock();
+        if !self.is_stopped() {
             self.wake.wait_for(&mut pending, timeout);
         }
     }

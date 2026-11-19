@@ -23,6 +23,9 @@ impl Player {
     pub(super) fn set_paused(&mut self, paused: bool) {
         self.paused = paused;
         self.controls().paused.store(paused, Ordering::Release);
+        if let Some(session) = self.session.as_ref() {
+            session.shared.lanes().set_held(paused);
+        }
     }
 
     pub(super) fn start(&mut self, index: usize) {
@@ -63,6 +66,14 @@ impl Player {
     }
 
     pub(super) fn seek_to(&mut self, target: Micros) {
+        self.seek_with_stride(target, None);
+    }
+
+    pub(super) fn seek_by(&mut self, delta: Micros) {
+        self.seek_with_stride(self.position + delta, Some(delta));
+    }
+
+    fn seek_with_stride(&mut self, target: Micros, stride: Option<Micros>) {
         let Some(session) = self.session.as_ref() else {
             return;
         };
@@ -77,7 +88,10 @@ impl Player {
             self.notify("This stream can only seek inside the buffered window");
             return;
         }
-        let (_, epoch) = session.shared.seek(target);
+        let (_, epoch) = match stride {
+            Some(stride) => session.shared.hop(target, stride),
+            None => session.shared.seek(target),
+        };
         self.clock.hold(target, epoch);
         self.position = target;
         self.seek_probe = Some((epoch, Instant::now()));

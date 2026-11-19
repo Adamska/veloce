@@ -8,6 +8,7 @@ use veloce::{
 const OPTIONS: OpenOptions = OpenOptions {
     sample_rate: 48_000,
     norm16_textures: true,
+    decode_threads: 0,
 };
 
 fn sample_clip(name: &str) -> Option<PathBuf> {

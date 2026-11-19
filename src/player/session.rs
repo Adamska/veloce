@@ -8,7 +8,9 @@ use crate::{
     demo::SyntheticSource,
     engine::{
         CacheLimits, FfmpegSource, OpenOptions, PipelineEvent, SessionShared, SourceFactory,
-        pipeline,
+        demuxer::is_network_location,
+        lanes::{self, SPARE_LANES},
+        pipeline, speculation,
     },
     gpu::GpuCapabilities,
     media::{MediaInfo, MediaSource},
@@ -21,6 +23,31 @@ pub struct Session {
     events: Receiver<PipelineEvent>,
 }
 
+fn source_factory(
+    location: &str,
+    sample_rate: u32,
+    capabilities: GpuCapabilities,
+    shared: &Arc<SessionShared>,
+    lane: usize,
+) -> SourceFactory {
+    if location == DEMO_LOCATION {
+        return Box::new(move || {
+            Ok(Box::new(SyntheticSource::new(sample_rate)) as Box<dyn MediaSource>)
+        });
+    }
+    let location = location.to_owned();
+    let cancel = shared.clone();
+    let options = OpenOptions {
+        sample_rate,
+        norm16_textures: capabilities.norm16_textures,
+        decode_threads: lanes::decode_threads(lane),
+    };
+    Box::new(move || {
+        let source = FfmpegSource::open(&location, options, move || cancel.is_stopped())?;
+        Ok(Box::new(source) as Box<dyn MediaSource>)
+    })
+}
+
 impl Session {
     pub fn open(
         location: &str,
@@ -28,26 +55,25 @@ impl Session {
         capabilities: GpuCapabilities,
         limits: CacheLimits,
     ) -> Result<Self> {
-        let shared = Arc::new(SessionShared::new(limits, sample_rate, 0));
-        let (sender, events) = crossbeam_channel::unbounded();
-        let factory: SourceFactory = if location == DEMO_LOCATION {
-            Box::new(
-                move || Ok(Box::new(SyntheticSource::new(sample_rate)) as Box<dyn MediaSource>),
-            )
+        let spare = if is_network_location(location) {
+            0
         } else {
-            let location = location.to_owned();
-            let cancel = shared.clone();
-            let options = OpenOptions {
-                sample_rate,
-                norm16_textures: capabilities.norm16_textures,
-            };
-            Box::new(move || {
-                let source = FfmpegSource::open(&location, options, move || cancel.is_stopped())?;
-                Ok(Box::new(source) as Box<dyn MediaSource>)
-            })
+            SPARE_LANES
         };
-        pipeline::spawn(shared.clone(), factory, sender)
+        let shared = Arc::new(SessionShared::with_spare_lanes(
+            limits,
+            sample_rate,
+            0,
+            spare,
+        ));
+        let (sender, events) = crossbeam_channel::unbounded();
+        let factory = |lane| source_factory(location, sample_rate, capabilities, &shared, lane);
+        pipeline::spawn(shared.clone(), factory(0), sender.clone())
             .context("failed to start the decode thread")?;
+        for lane in 1..=spare {
+            speculation::spawn_spare(shared.clone(), lane, factory(lane), sender.clone())
+                .context("failed to start a speculative decode thread")?;
+        }
         Ok(Self {
             shared,
             info: None,
