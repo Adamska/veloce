@@ -159,7 +159,7 @@ impl Player {
     }
 
     fn select_subtitles(&mut self, selection: Option<SubtitleSelection>) {
-        self.subtitles.selection = selection;
+        self.subtitles.select(selection);
         self.notify(format!("Subtitles: {}", self.subtitles.label()));
     }
 }

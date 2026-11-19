@@ -54,7 +54,9 @@ cargo run --release -- https://example.com/live/index.m3u8
 
 `VELOCE_CACHE_MB` sets the same budget from the environment. `VELOCE_HWACCEL` selects the video decoder: unset picks automatically, `on` forces hardware decoding and `off` forces software decoding.
 
-Files can also be dropped onto the window. Dropping media replaces the queue, or appends to it while the playlist drawer is open. Dropping an `.srt`, `.vtt` or `.ass` file loads it as a subtitle track. Subtitle files that share the media file name are picked up automatically.
+Files can also be dropped onto the window. Dropping media replaces the queue, or appends to it while the playlist drawer is open. Dropping an `.srt`, `.vtt` or `.ass` file loads it as a subtitle track. Subtitle files that share the media file name are picked up automatically, including tagged ones such as `Movie.fr.srt` or `Movie.en.forced.srt`.
+
+The subtitle choice carries over from one file to the next. When a new file opens, Veloce looks for the track closest to the one shown in the previous file: same language first (ISO codes and language names are treated alike, so `fre`, `fr` and `French` match), then the same title and flags such as forced or SDH, across embedded tracks and sidecar files. Turning subtitles off is remembered too.
 
 ### macOS app
 
@@ -247,7 +249,7 @@ The inspector (`Cmd/Ctrl` + `I`) shows the same counters live: window extent, me
 cargo test
 ```
 
-The suite is headless. It covers the ring buffer, seek coalescing and prepared hops in both directions, the clock, the audio timeline, pitch preservation across the speed range, marker alignment between the DSP thread and the callback, subtitle parsing, color matrices, offscreen GPU rendering including HDR10 tone mapping, an FFmpeg decode and seek round trip, the player end to end on the demo stream, and a layout pass over every interface surface. The player and interface tests open the audio device at zero volume; tests that need the `ffmpeg` binary or a GPU adapter skip themselves when it is missing.
+The suite is headless. It covers the ring buffer, seek coalescing and prepared hops in both directions, the clock, the audio timeline, pitch preservation across the speed range, marker alignment between the DSP thread and the callback, subtitle parsing and the carried-over track choice, color matrices, offscreen GPU rendering including HDR10 tone mapping, an FFmpeg decode and seek round trip, the player end to end on the demo stream, and a layout pass over every interface surface. The player and interface tests open the audio device at zero volume; tests that need the `ffmpeg` binary or a GPU adapter skip themselves when it is missing.
 
 Setting `VELOCE_UI_SNAPSHOT_DIR` while running `cargo test --test ui_smoke` writes a PNG of each interface surface to that directory.
 

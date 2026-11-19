@@ -21,7 +21,9 @@ impl Player {
         for event in session.drain_events() {
             match event {
                 PipelineEvent::Opened(info) => {
-                    self.subtitles.adopt_embedded(&info);
+                    if self.subtitles.adopt_embedded(&info) {
+                        self.notify(format!("Subtitles: {}", self.subtitles.label()));
+                    }
                     if let Some(session) = self.session.as_mut() {
                         session.info = Some(*info);
                     }
