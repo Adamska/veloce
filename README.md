@@ -73,7 +73,7 @@ The installed app appears in Launchpad and Spotlight, and in Finder's **Open Wit
 
 To make Veloce the default player for a format, select a file of that type in Finder, choose **File > Get Info**, pick Veloce under **Open with** and click **Change All**.
 
-The app icon and every logo size in `assets/logo` come from `assets/logo/veloce.png`. After replacing that image, run `scripts/render-logo.sh` to trim it and regenerate the sizes and `assets/macos/AppIcon.icns`, which places the logo on a squircle tile in Apple's 824 of 1024 px icon grid. A full tile matters on macOS 26 and later, which otherwise shrinks the icon into a grey container. The tile alone is kept as `assets/logo/veloce-app-icon.png`. It needs ImageMagick.
+The app icon and every logo size in `assets/logo` come from `assets/logo/veloce.png`. After replacing that image, run `scripts/render-logo.sh` to trim it and regenerate the sizes. The bundle script compiles `assets/macos/AppIcon.icon`, an Icon Composer document whose logo layer the render script refreshes, into `Assets.car` with Xcode's `actool`. That is the only format macOS 26 and later draw natively, including the tinted and clear appearances; a plain `.icns` is shown shrunk inside a grey tile. Without Xcode the bundle falls back to the legacy `assets/macos/AppIcon.icns`. The render script needs ImageMagick.
 
 The bundle links the FFmpeg libraries installed by Homebrew and is signed ad hoc, so it is meant for the machine that built it. Running the script again replaces the installed copy; quit Veloce first. To uninstall, delete `/Applications/Veloce.app`.
 

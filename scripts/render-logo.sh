@@ -28,6 +28,7 @@ side="$(magick "$work/trimmed.png" -format '%[fx:max(w,h)]' info:)"
 magick "$work/trimmed.png" -background none -gravity center -extent "${side}x${side}" \
     -strip "$work/master.png"
 mv "$work/master.png" "$master"
+cp "$master" assets/macos/AppIcon.icon/Assets/veloce.png
 
 resize() {
     magick "$master" -filter Lanczos -resize "$2x$2" -strip "$1"
@@ -37,8 +38,8 @@ for size in 1024 512 256 128 64 32 16; do
     resize "$logo_dir/veloce-$size.png" "$size"
 done
 
-# macOS 26 puts icons that are not a full tile into a grey container and shrinks them, so the
-# app icon is a squircle tile in Apple's 824 of 1024 px grid with the logo filling most of it.
+# Legacy AppIcon.icns, used only when the bundle is built without Xcode's actool. With actool the
+# app icon comes from assets/macos/AppIcon.icon, whose logo layer is refreshed above.
 squircle() {
     awk 'BEGIN {
         n = 4; a = 412; c = 512; pi = atan2(0, -1)

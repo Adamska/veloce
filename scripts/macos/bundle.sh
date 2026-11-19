@@ -33,7 +33,19 @@ app="target/release/bundle/Veloce.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp target/release/veloce "$app/Contents/MacOS/veloce"
-cp assets/macos/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
+# macOS 26 and later only render an icon natively from an Icon Composer document compiled into
+# Assets.car; a plain .icns is treated as legacy and shrunk into a grey tile.
+if xcrun --find actool >/dev/null 2>&1; then
+    xcrun actool assets/macos/AppIcon.icon --compile "$app/Contents/Resources" \
+        --output-format human-readable-text --errors \
+        --output-partial-info-plist "$app/icon-info.plist" --app-icon AppIcon \
+        --include-all-app-icons --enable-on-demand-resources NO --development-region en \
+        --target-device mac --platform macosx --minimum-deployment-target 11.0 >/dev/null
+    rm -f "$app/icon-info.plist"
+else
+    echo "actool not found (install Xcode); falling back to the legacy icon." >&2
+    cp assets/macos/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
+fi
 sed -e "s/__VERSION__/$version/" -e "s/__BUILD__/$build/" assets/macos/Info.plist \
     > "$app/Contents/Info.plist"
 printf 'APPL????' > "$app/Contents/PkgInfo"

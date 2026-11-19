@@ -10,6 +10,8 @@
     <string>veloce</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>io.github.adamska.veloce</string>
     <key>CFBundleInfoDictionaryVersion</key>
