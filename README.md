@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo/veloce-256.png" width="128" height="128" alt="Veloce logo"></p>
+
 # Veloce
 
 Veloce is a native, GPU-accelerated media player written in Rust. It is built around one idea: scrubbing, frame stepping and speed changes should be answered from memory instead of from the decoder. A sliding window of decoded frames and audio stays resident around the playhead, so a `+5s` or `-5s` tap that lands inside the window is a lookup, not a demuxer seek.
@@ -68,6 +70,8 @@ scripts/macos/bundle.sh --install   # also installs to /Applications and registe
 The installed app appears in Launchpad and Spotlight, and in Finder's **Open With** menu for video and audio files, including MKV, WebM, AVI, FLV and FLAC. Files can be dropped on the Dock icon. Opening a file while Veloce is running plays it in the existing window.
 
 To make Veloce the default player for a format, select a file of that type in Finder, choose **File > Get Info**, pick Veloce under **Open with** and click **Change All**.
+
+The app icon and every logo size in `assets/logo` come from `assets/logo/veloce.png`. After replacing that image, run `scripts/render-logo.sh` to trim it and regenerate the sizes and `assets/macos/AppIcon.icns`, which keeps the artwork inside Apple's 824 of 1024 px icon grid so it sits level with other apps in the Dock. It needs ImageMagick.
 
 The bundle links the FFmpeg libraries installed by Homebrew and is signed ad hoc, so it is meant for the machine that built it. Running the script again replaces the installed copy; quit Veloce first. To uninstall, delete `/Applications/Veloce.app`.
 

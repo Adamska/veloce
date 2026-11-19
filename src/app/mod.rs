@@ -1,5 +1,6 @@
 mod files;
 mod frame;
+mod icon;
 mod input;
 #[cfg(target_os = "macos")]
 mod macos;

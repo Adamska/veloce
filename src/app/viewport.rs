@@ -12,7 +12,7 @@ use winit::{
     window::{Fullscreen, Window},
 };
 
-use super::{AppEvent, files, options::Options};
+use super::{AppEvent, files, icon, options::Options};
 use crate::{
     gpu::{GpuContext, VideoPipeline, snapshot},
     player::{Command, Player},
@@ -42,6 +42,7 @@ pub struct Viewport {
 fn window_attributes() -> winit::window::WindowAttributes {
     let attributes = Window::default_attributes()
         .with_title("Veloce")
+        .with_window_icon(icon::window_icon())
         .with_inner_size(LogicalSize::new(1280.0, 720.0))
         .with_min_inner_size(LogicalSize::new(720.0, 405.0));
     #[cfg(target_os = "macos")]
