@@ -97,12 +97,17 @@ fn every_surface_lays_out_without_spurious_actions() {
     for (tab, name) in [
         (Tab::Video, "06-filters-video"),
         (Tab::Audio, "07-filters-audio"),
-        (Tab::Subtitles, "08-filters-subtitles"),
     ] {
         interface.apply(&Action::ShowFilters(tab));
         stage.settle(&mut interface, &player, Some(&selection));
         stage.save(name);
     }
+    interface.apply(&Action::ToggleSubtitles);
+    stage.settle(&mut interface, &player, Some(&selection));
+    stage.save("08-subtitle-window");
+    interface.apply(&Action::ToggleMoreControls);
+    stage.settle(&mut interface, &player, Some(&selection));
+    stage.save("10-more-controls");
     assert!(interface.has_overlay());
     assert!(interface.apply(&Action::Dismiss));
     assert!(!interface.has_overlay());
@@ -119,4 +124,16 @@ fn every_surface_lays_out_without_spurious_actions() {
     player.take_notices();
     stage.settle(&mut interface, &player, Some(&selection));
     stage.save("09-subtitles");
+}
+
+#[test]
+fn control_capsule_fits_the_minimum_window_width() {
+    let Some(mut stage) = Stage::with_size([1088, 612]) else {
+        return;
+    };
+    let (player, selection) = paused_demo();
+    let mut interface = Interface::default();
+    interface.apply(&Action::ToggleMoreControls);
+    stage.settle(&mut interface, &player, Some(&selection));
+    stage.save("11-narrow-expanded");
 }

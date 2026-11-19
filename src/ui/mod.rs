@@ -10,6 +10,7 @@ mod playlist;
 mod scrubber;
 mod subtitle_panel;
 pub mod theme;
+mod title;
 mod toast;
 mod welcome;
 pub mod widgets;
@@ -42,10 +43,17 @@ pub struct ViewContext<'a> {
     pub stats: RenderStats<'a>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Panel {
+    Playlist,
+    Filters,
+    Subtitles,
+}
+
 #[derive(Default)]
 pub struct Interface {
-    playlist_open: bool,
-    filters_open: bool,
+    panel: Option<Panel>,
+    more_controls: bool,
     inspector_open: bool,
     filter_tab: filters_panel::Tab,
     network: network_dialog::NetworkDialog,
@@ -70,7 +78,7 @@ impl Interface {
     }
 
     pub fn playlist_open(&self) -> bool {
-        self.playlist_open
+        self.panel == Some(Panel::Playlist)
     }
 
     pub fn wants_cursor_hidden(&self) -> bool {
@@ -78,30 +86,29 @@ impl Interface {
     }
 
     pub fn has_overlay(&self) -> bool {
-        self.playlist_open || self.filters_open || self.network.is_open()
+        self.panel.is_some() || self.network.is_open()
+    }
+
+    fn toggle(&mut self, panel: Panel) {
+        self.panel = (self.panel != Some(panel)).then_some(panel);
     }
 
     pub fn apply(&mut self, action: &Action) -> bool {
         match action {
-            Action::TogglePlaylist => {
-                self.playlist_open = !self.playlist_open;
-                self.filters_open &= !self.playlist_open;
-            }
-            Action::ToggleFilters => {
-                self.filters_open = !self.filters_open;
-                self.playlist_open &= !self.filters_open;
-            }
+            Action::TogglePlaylist => self.toggle(Panel::Playlist),
+            Action::ToggleFilters => self.toggle(Panel::Filters),
+            Action::ToggleSubtitles => self.toggle(Panel::Subtitles),
             Action::ShowFilters(tab) => {
-                self.filters_open = !(self.filters_open && self.filter_tab == *tab);
+                let showing = self.panel == Some(Panel::Filters) && self.filter_tab == *tab;
+                self.panel = (!showing).then_some(Panel::Filters);
                 self.filter_tab = *tab;
-                self.playlist_open &= !self.filters_open;
             }
+            Action::ToggleMoreControls => self.more_controls = !self.more_controls,
             Action::ToggleInspector => self.inspector_open = !self.inspector_open,
             Action::ShowNetworkDialog => self.network.open(),
             Action::Dismiss if self.has_overlay() => {
                 self.network.close();
-                self.playlist_open = false;
-                self.filters_open = false;
+                self.panel = None;
             }
             _ => return false,
         }
@@ -156,11 +163,14 @@ impl Interface {
             subtitles::renderer::paint(&painter, area, &lines, &player.subtitles.style);
         }
         let toggles = hud::Toggles {
-            playlist: self.playlist_open,
-            filters: self.filters_open,
+            playlist: self.panel == Some(Panel::Playlist),
+            filters: self.panel == Some(Panel::Filters),
+            subtitles: self.panel == Some(Panel::Subtitles),
             inspector: self.inspector_open,
+            more: self.more_controls,
         };
         let hud_rect = hud::show(&ctx, view, opacity, &toggles, actions);
+        title::show(&ctx, view, opacity);
         if let (Some(rect), Some(pointer)) = (hud_rect, ctx.pointer_hover_pos())
             && rect.contains(pointer)
         {
@@ -168,10 +178,24 @@ impl Interface {
         }
         self.hud_visible = wanted || opacity > 0.0 || !player.has_session();
 
-        let playlist = ctx.animate_bool(Id::unique("playlist drawer state"), self.playlist_open);
-        playlist::show(&ctx, view, playlist, actions);
-        let filters = ctx.animate_bool(Id::unique("filters drawer state"), self.filters_open);
+        let openness = |name: &'static str, panel: Panel| {
+            ctx.animate_bool(Id::unique(name), self.panel == Some(panel))
+        };
+        playlist::show(
+            &ctx,
+            view,
+            openness("playlist drawer state", Panel::Playlist),
+            actions,
+        );
+        let filters = openness("filters drawer state", Panel::Filters);
+        let subtitles = openness("subtitle window state", Panel::Subtitles);
         filters_panel::show(&ctx, view, filters, &mut self.filter_tab, actions);
+        let screen = ctx.content_rect();
+        let anchor = egui::pos2(
+            hud_rect.map_or(screen.right() - 24.0, |rect| rect.right()),
+            screen.bottom() - widgets::HUD_RESERVE,
+        );
+        subtitle_panel::window(&ctx, view, subtitles, anchor, actions);
         if self.inspector_open {
             inspector::show(&ctx, view);
         }

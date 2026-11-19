@@ -11,6 +11,8 @@ pub enum Action {
     TogglePlaylist,
     ToggleFilters,
     ShowFilters(Tab),
+    ToggleSubtitles,
+    ToggleMoreControls,
     ToggleInspector,
     ToggleFullscreen,
     Snapshot,

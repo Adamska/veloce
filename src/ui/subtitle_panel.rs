@@ -1,10 +1,11 @@
-use egui::{RichText, Ui};
+use egui::{Align, Align2, Area, Id, Layout, Order, Pos2, RichText, Ui};
 
 use super::{
     ViewContext,
     action::Action,
+    icons::Icon,
     theme,
-    widgets::{chip, section, slider_row},
+    widgets::{capsule, chip, icon_button, section, slider_row},
 };
 use crate::{
     player::{
@@ -14,7 +15,7 @@ use crate::{
     subtitles::SubtitleStyle,
 };
 
-pub fn show(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>) {
+fn contents(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>) {
     let subtitles = &view.player.subtitles;
 
     section(ui, "Subtitle track");
@@ -87,4 +88,43 @@ pub fn show(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>) {
     if style != subtitles.style {
         actions.push(Command::SetSubtitleStyle(style).into());
     }
+}
+
+const WIDTH: f32 = 348.0;
+
+pub fn window(
+    ctx: &egui::Context,
+    view: &ViewContext<'_>,
+    openness: f32,
+    anchor: Pos2,
+    actions: &mut Vec<Action>,
+) {
+    if openness <= 0.001 {
+        return;
+    }
+    Area::new(Id::unique("subtitle window"))
+        .order(Order::Foreground)
+        .pivot(Align2::RIGHT_BOTTOM)
+        .default_pos(anchor)
+        .movable(true)
+        .constrain(true)
+        .show(ctx, |ui| {
+            ui.multiply_opacity(openness);
+            capsule(1.14).show(ui, |ui| {
+                ui.set_width(WIDTH);
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new("Subtitles")
+                            .font(theme::sans(15.0))
+                            .color(theme::TEXT),
+                    );
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if icon_button(ui, Icon::Close, "Close (Esc)", false).clicked() {
+                            actions.push(Action::ToggleSubtitles);
+                        }
+                    });
+                });
+                contents(ui, view, actions);
+            });
+        });
 }

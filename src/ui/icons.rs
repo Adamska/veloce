@@ -21,6 +21,7 @@ pub enum Icon {
     Repeat,
     RepeatOne,
     Loop,
+    More,
 }
 
 struct Pen<'a> {
@@ -148,6 +149,11 @@ impl Icon {
                 pen.path(&[(10.0, 2.5), (13.5, 2.5), (13.5, 6.0)]);
                 pen.path(&[(13.5, 10.0), (13.5, 13.5), (10.0, 13.5)]);
                 pen.path(&[(6.0, 13.5), (2.5, 13.5), (2.5, 10.0)]);
+            }
+            Self::More => {
+                for x in [3.5, 8.0, 12.5] {
+                    pen.dot(x, 8.0, 1.3);
+                }
             }
             Self::Minus => pen.line((4.0, 8.0), (12.0, 8.0)),
             Self::Plus => {

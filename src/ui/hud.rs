@@ -1,4 +1,4 @@
-use egui::{Align, Align2, Area, Color32, Id, Layout, Order, Rect, RichText, Ui};
+use egui::{Align, Align2, Area, Id, Layout, Order, Rect, RichText, Ui};
 
 use super::{
     ViewContext,
@@ -12,14 +12,17 @@ use super::{
 use crate::player::{Command, command::format_speed};
 
 const MAX_WIDTH: f32 = 940.0;
+const COMPACT_BELOW: f32 = 850.0;
 
 pub struct Toggles {
     pub playlist: bool,
     pub filters: bool,
+    pub subtitles: bool,
     pub inspector: bool,
+    pub more: bool,
 }
 
-fn transport(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>) {
+fn transport(ui: &mut Ui, view: &ViewContext<'_>, compact: bool, actions: &mut Vec<Action>) {
     let player = view.player;
     if icon_button(ui, Icon::Previous, "Previous (P)", false).clicked() {
         actions.push(Command::PlayPrevious.into());
@@ -36,29 +39,23 @@ fn transport(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>) {
         actions.push(Command::PlayNext.into());
     }
     ui.add_space(6.0);
-    ui.label(
-        RichText::new(format_timecode(player.position()))
-            .font(theme::mono(12.5))
-            .color(theme::TEXT),
-    );
-    let total = player
-        .duration()
-        .map_or_else(|| "LIVE".to_owned(), format_timecode);
-    ui.label(
-        RichText::new(format!("/ {total}"))
-            .font(theme::mono(12.5))
-            .color(theme::TEXT_DIM),
-    );
+    let mono = |text: String, color| RichText::new(text).font(theme::mono(12.5)).color(color);
+    ui.label(mono(format_timecode(player.position()), theme::TEXT));
+    if !compact {
+        let total = player
+            .duration()
+            .map_or_else(|| "LIVE".to_owned(), format_timecode);
+        ui.label(mono(format!("/ {total}"), theme::TEXT_DIM));
+    }
 }
 
 fn speed_stepper(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>) {
     if icon_button(ui, Icon::Plus, "Faster (])", false).clicked() {
         actions.push(Command::StepSpeed { faster: true }.into());
     }
-    let effective = view.player.effective_speed();
     let boosted = view.player.is_skipping_silence();
     let shown = if boosted {
-        effective
+        view.player.effective_speed()
     } else {
         view.player.speed()
     };
@@ -72,15 +69,10 @@ fn speed_stepper(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>)
     let label = RichText::new(format_speed(shown))
         .font(theme::mono(12.0))
         .color(color);
-    if ui
-        .add(
-            egui::Button::new(label)
-                .frame(false)
-                .min_size([46.0, 22.0].into()),
-        )
-        .on_hover_text("Reset speed (=)")
-        .clicked()
-    {
+    let reset = egui::Button::new(label)
+        .frame(false)
+        .min_size([46.0, 22.0].into());
+    if ui.add(reset).on_hover_text("Reset speed (=)").clicked() {
         actions.push(Command::ResetSpeed.into());
     }
     if icon_button(ui, Icon::Minus, "Slower ([)", false).clicked() {
@@ -88,75 +80,92 @@ fn speed_stepper(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>)
     }
 }
 
-fn tools(ui: &mut Ui, view: &ViewContext<'_>, toggles: &Toggles, actions: &mut Vec<Action>) {
-    let player = view.player;
-    if icon_button(ui, Icon::Fullscreen, "Fullscreen (F)", false).clicked() {
-        actions.push(Action::ToggleFullscreen);
-    }
-    if icon_button(ui, Icon::Info, "Inspector (Cmd/Ctrl+I)", toggles.inspector).clicked() {
-        actions.push(Action::ToggleInspector);
-    }
-    if icon_button(
-        ui,
-        Icon::Playlist,
-        "Playlist (Cmd/Ctrl+L)",
-        toggles.playlist,
-    )
-    .clicked()
-    {
-        actions.push(Action::TogglePlaylist);
-    }
-    if icon_button(
-        ui,
-        Icon::Sliders,
-        "Filters and equalizer (E)",
-        toggles.filters,
-    )
-    .clicked()
-    {
-        actions.push(Action::ToggleFilters);
-    }
-    let looping = player.loop_points().0.is_some();
+fn extra_controls(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>) {
+    let looping = view.player.loop_points().0.is_some();
     if icon_button(ui, Icon::Loop, "A-B loop (L)", looping).clicked() {
         actions.push(Command::ToggleLoopPoint.into());
     }
-    let audio = icon_button(
-        ui,
-        Icon::AudioTrack,
-        "Cycle audio track (B), right-click for options",
-        false,
-    );
+    let hint = "Cycle audio track (B), right-click for options";
+    let audio = icon_button(ui, Icon::AudioTrack, hint, false);
     if audio.clicked() {
         actions.push(Command::CycleAudioTrack.into());
     } else if audio.secondary_clicked() {
         actions.push(Action::ShowFilters(Tab::Audio));
     }
-    let subtitled = player.subtitles.selection.is_some();
-    let subtitles = icon_button(
-        ui,
-        Icon::Subtitles,
-        "Cycle subtitles (S), right-click for options",
-        subtitled,
-    );
-    if subtitles.clicked() {
-        actions.push(Command::CycleSubtitles.into());
-    } else if subtitles.secondary_clicked() {
-        actions.push(Action::ShowFilters(Tab::Subtitles));
+}
+
+fn panel_buttons(ui: &mut Ui, toggles: &Toggles, actions: &mut Vec<Action>) {
+    let buttons = [
+        (
+            Icon::Fullscreen,
+            "Fullscreen (F)",
+            false,
+            Action::ToggleFullscreen,
+        ),
+        (
+            Icon::Info,
+            "Inspector (Cmd/Ctrl+I)",
+            toggles.inspector,
+            Action::ToggleInspector,
+        ),
+        (
+            Icon::Playlist,
+            "Playlist (Cmd/Ctrl+L)",
+            toggles.playlist,
+            Action::TogglePlaylist,
+        ),
+        (
+            Icon::Sliders,
+            "Filters and equalizer (E)",
+            toggles.filters,
+            Action::ToggleFilters,
+        ),
+    ];
+    for (icon, hint, active, action) in buttons {
+        if icon_button(ui, icon, hint, active).clicked() {
+            actions.push(action);
+        }
+    }
+}
+
+fn tools(
+    ui: &mut Ui,
+    view: &ViewContext<'_>,
+    toggles: &Toggles,
+    compact: bool,
+    actions: &mut Vec<Action>,
+) {
+    let player = view.player;
+    panel_buttons(ui, toggles, actions);
+    let hidden_loop = !toggles.more && player.loop_points().0.is_some();
+    let hint = if toggles.more {
+        "Fewer controls"
+    } else {
+        "More controls"
+    };
+    if icon_button(ui, Icon::More, hint, toggles.more || hidden_loop).clicked() {
+        actions.push(Action::ToggleMoreControls);
+    }
+    if toggles.more {
+        extra_controls(ui, view, actions);
+    }
+    let subtitled = toggles.subtitles || player.subtitles.selection.is_some();
+    if icon_button(ui, Icon::Subtitles, "Subtitles", subtitled).clicked() {
+        actions.push(Action::ToggleSubtitles);
     }
     ui.add_space(4.0);
-    let mut volume = player.volume();
-    ui.spacing_mut().slider_width = 78.0;
-    let slider = ui
-        .add(egui::Slider::new(&mut volume, 0.0..=2.0).show_value(false))
-        .on_hover_text(format!("Volume {:.0}%", volume * 100.0));
-    if slider.changed() {
-        actions.push(Command::SetVolume(volume).into());
+    if !compact {
+        let mut volume = player.volume();
+        ui.spacing_mut().slider_width = 78.0;
+        let slider = ui
+            .add(egui::Slider::new(&mut volume, 0.0..=2.0).show_value(false))
+            .on_hover_text(format!("Volume {:.0}%", volume * 100.0));
+        if slider.changed() {
+            actions.push(Command::SetVolume(volume).into());
+        }
     }
-    let icon = if player.is_muted() || player.volume() <= 0.0 {
-        Icon::Muted
-    } else {
-        Icon::Volume
-    };
+    let silent = player.is_muted() || player.volume() <= 0.0;
+    let icon = if silent { Icon::Muted } else { Icon::Volume };
     if icon_button(ui, icon, "Mute (M)", false).clicked() {
         actions.push(Command::ToggleMute.into());
     }
@@ -175,8 +184,8 @@ pub fn show(
         return None;
     }
     let player = view.player;
-    let screen = ctx.content_rect();
-    let width = (screen.width() - 48.0).min(MAX_WIDTH);
+    let content_width = (ctx.content_rect().width() - 48.0).min(MAX_WIDTH) - 28.0;
+    let compact = content_width < COMPACT_BELOW;
     let response = Area::new(Id::unique("hud"))
         .order(Order::Foreground)
         .anchor(Align2::CENTER_BOTTOM, [0.0, -22.0])
@@ -184,7 +193,7 @@ pub fn show(
         .show(ctx, |ui| {
             ui.multiply_opacity(opacity);
             capsule(1.0).show(ui, |ui| {
-                ui.set_width(width - 28.0);
+                ui.set_width(content_width);
                 let model = ScrubberModel {
                     position: player.position(),
                     duration: player.duration().unwrap_or(0),
@@ -200,43 +209,12 @@ pub fn show(
                 }
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
-                    transport(ui, view, actions);
+                    transport(ui, view, compact, actions);
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        tools(ui, view, toggles, actions);
+                        tools(ui, view, toggles, compact, actions);
                     });
                 });
             });
         });
-
-    if let Some(info) = player.info() {
-        let painter = ctx.layer_painter(egui::LayerId::new(Order::Middle, Id::unique("title")));
-        let origin = screen.left_top() + egui::vec2(24.0, 40.0);
-        let chapter = info
-            .chapter_at(player.position())
-            .map(|chapter| chapter.title.as_str());
-        let lines = [
-            (
-                Some(info.title.as_str()),
-                0.0,
-                theme::sans(15.0),
-                theme::TEXT,
-            ),
-            (chapter, 22.0, theme::sans(12.0), theme::TEXT_DIM),
-        ];
-        for (text, top, font, color) in lines {
-            let Some(text) = text else {
-                continue;
-            };
-            for (offset, color) in [(1.0, Color32::from_black_alpha(200)), (0.0, color)] {
-                painter.text(
-                    origin + egui::vec2(0.0, top + offset),
-                    Align2::LEFT_TOP,
-                    text,
-                    font.clone(),
-                    theme::fade(color, opacity),
-                );
-            }
-        }
-    }
     Some(response.response.rect)
 }

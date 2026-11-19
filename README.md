@@ -75,7 +75,7 @@ Files can also be dropped onto the window. Dropping media replaces the queue, or
 | `L` | A-B loop: set A, set B, clear |
 | `N` / `P` | Next / previous playlist item |
 | `Shift` + `N` / `P` | Next / previous chapter |
-| `E` | Filters, equalizer and subtitle options |
+| `E` | Filters and equalizer |
 | `Cmd/Ctrl` + `I` | Codec and performance inspector |
 | `Cmd/Ctrl` + `L` | Playlist drawer |
 | `Cmd/Ctrl` + `O` | Open file |
@@ -83,7 +83,9 @@ Files can also be dropped onto the window. Dropping media replaces the queue, or
 | `Cmd/Ctrl` + `S` | Save a PNG snapshot of the current frame |
 | `Esc` | Close the open drawer, or leave fullscreen |
 
-Snapshots are written to `~/Pictures/Veloce`. Right-clicking the audio or subtitle button in the control capsule opens the matching options tab.
+Snapshots are written to `~/Pictures/Veloce`.
+
+The control capsule keeps the common controls visible. The subtitle button opens a floating, draggable subtitle window with track selection, file loading, delay and appearance. The A-B loop and audio track buttons appear after pressing the More button, which stays highlighted while a loop is active. Right-clicking the audio track button opens the audio options.
 
 ## Architecture
 

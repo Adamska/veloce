@@ -7,11 +7,12 @@ use veloce::{
     ui::{Action, Interface, RenderStats, ViewContext, theme},
 };
 
-const SIZE: [u32; 2] = [1920, 1080];
+const DEFAULT_SIZE: [u32; 2] = [1920, 1080];
 const SCALE: f32 = 1.5;
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 pub struct Stage {
+    size: [u32; 2],
     device: wgpu::Device,
     queue: wgpu::Queue,
     pub ctx: egui::Context,
@@ -23,6 +24,10 @@ pub struct Stage {
 
 impl Stage {
     pub fn new() -> Option<Self> {
+        Self::with_size(DEFAULT_SIZE)
+    }
+
+    pub fn with_size(size: [u32; 2]) -> Option<Self> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter =
             pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
@@ -38,8 +43,8 @@ impl Stage {
         let target = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("ui smoke"),
             size: wgpu::Extent3d {
-                width: SIZE[0],
-                height: SIZE[1],
+                width: size[0],
+                height: size[1],
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -50,6 +55,7 @@ impl Stage {
             view_formats: &[],
         });
         Some(Self {
+            size,
             renderer: Renderer::new(&device, FORMAT, RendererOptions::default()),
             video: VideoPipeline::new(&device, FORMAT),
             device,
@@ -66,7 +72,7 @@ impl Stage {
         player: &Player,
         selection: Option<&FrameSelection>,
     ) -> Vec<Action> {
-        let screen = egui::vec2(SIZE[0] as f32, SIZE[1] as f32) / SCALE;
+        let screen = egui::vec2(self.size[0] as f32, self.size[1] as f32) / SCALE;
         let mut video_rect = None;
         if let Some(selection) = selection {
             let placement = player
@@ -116,7 +122,7 @@ impl Stage {
         output.textures_delta.clear();
         let primitives = self.ctx.tessellate(output.shapes, output.pixels_per_point);
         let descriptor = ScreenDescriptor {
-            size_in_pixels: SIZE,
+            size_in_pixels: self.size,
             pixels_per_point: output.pixels_per_point,
         };
         let view = self
@@ -169,10 +175,10 @@ impl Stage {
         let Some(directory) = std::env::var_os("VELOCE_UI_SNAPSHOT_DIR").map(PathBuf::from) else {
             return;
         };
-        let row = SIZE[0] * 4;
+        let row = self.size[0] * 4;
         let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: u64::from(row * SIZE[1]),
+            size: u64::from(row * self.size[1]),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
@@ -184,7 +190,7 @@ impl Stage {
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(row),
-                    rows_per_image: Some(SIZE[1]),
+                    rows_per_image: Some(self.size[1]),
                 },
             },
             self.target.size(),
@@ -200,8 +206,8 @@ impl Stage {
             .expect("buffer is mapped")
             .to_vec();
         let image = Snapshot {
-            width: SIZE[0],
-            height: SIZE[1],
+            width: self.size[0],
+            height: self.size[1],
             rgba,
         };
         image
