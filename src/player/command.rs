@@ -45,6 +45,8 @@ pub enum Command {
     SetGeometry(Geometry),
     SetSubtitleStyle(SubtitleStyle),
     Open(Vec<String>),
+    ForgetRecent(PathBuf),
+    ClearRecent,
     Enqueue(Vec<String>),
     OpenDemo,
     LoadSubtitles(PathBuf),

@@ -8,8 +8,12 @@ source="${1:-assets/logo/veloce.png}"
 logo_dir=assets/logo
 master="$logo_dir/veloce.png"
 icns=assets/macos/AppIcon.icns
-# Apple's macOS icon grid draws the artwork in 824 of 1024 px so it lines up with other apps.
-icon_body_ratio="824/1024"
+# App icon tile, matching the welcome screen backdrop.
+tile_top="#1E222A"
+tile_bottom="#0B0D11"
+tile_glow="rgba(40,200,170,0.30)"
+tile_rim="rgba(255,255,255,0.14)"
+logo_in_tile=676
 
 command -v magick >/dev/null || { echo "ImageMagick (magick) is required" >&2; exit 1; }
 mkdir -p "$logo_dir"
@@ -33,21 +37,52 @@ for size in 1024 512 256 128 64 32 16; do
     resize "$logo_dir/veloce-$size.png" "$size"
 done
 
+# macOS 26 puts icons that are not a full tile into a grey container and shrinks them, so the
+# app icon is a squircle tile in Apple's 824 of 1024 px grid with the logo filling most of it.
+squircle() {
+    awk 'BEGIN {
+        n = 4; a = 412; c = 512; pi = atan2(0, -1)
+        for (i = 0; i < 720; i++) {
+            t = 2 * pi * i / 720; ct = cos(t); st = sin(t)
+            x = c + a * (ct < 0 ? -1 : 1) * (ct < 0 ? -ct : ct) ^ (2 / n)
+            y = c + a * (st < 0 ? -1 : 1) * (st < 0 ? -st : st) ^ (2 / n)
+            printf "%.2f,%.2f ", x, y
+        }
+    }'
+}
+
+render_tile() {
+    local outline
+    outline="$(squircle)"
+    magick -size 1024x1024 xc:none -fill white -draw "polygon $outline" "$work/mask.png"
+    magick -size 1024x1024 gradient:"$tile_top"-"$tile_bottom" \
+        \( -size 1024x1024 radial-gradient:"$tile_glow"-none \) -compose over -composite \
+        "$work/mask.png" -alpha off -compose CopyOpacity -composite "$work/tile.png"
+    magick -size 1024x1024 xc:none -fill none -stroke "$tile_rim" -strokewidth 3 \
+        -draw "polygon $outline" "$work/mask.png" -compose DstIn -composite "$work/rim.png"
+    magick "$work/mask.png" -fill black -colorize 100 -channel A -evaluate multiply 0.35 \
+        +channel -blur 0x14 "$work/shadow.png"
+    magick -size 1024x1024 xc:none "$work/shadow.png" -geometry +0+10 -compose over -composite \
+        "$work/tile.png" -geometry +0+0 -composite "$work/rim.png" -composite \
+        \( "$master" -filter Lanczos -resize "${logo_in_tile}x${logo_in_tile}" \) \
+        -gravity center -composite -strip "$logo_dir/veloce-app-icon.png"
+}
+
+render_tile
 if command -v iconutil >/dev/null; then
     iconset="$work/AppIcon.iconset"
     mkdir -p "$iconset"
     for size in 16 32 128 256 512; do
         for scale in 1 2; do
             pixels=$((size * scale))
-            body=$((pixels * ${icon_body_ratio}))
             name="icon_${size}x${size}"
             [[ $scale == 2 ]] && name="${name}@2x"
-            magick "$master" -filter Lanczos -resize "${body}x${body}" -background none \
-                -gravity center -extent "${pixels}x${pixels}" -strip "$iconset/$name.png"
+            magick "$logo_dir/veloce-app-icon.png" -filter Lanczos -resize "${pixels}x${pixels}" \
+                -strip "$iconset/$name.png"
         done
     done
     iconutil -c icns "$iconset" -o "$icns"
     echo "Wrote $icns"
 fi
 
-echo "Wrote $master (${side}x${side}) and sizes 16 to 1024 in $logo_dir"
+echo "Wrote $master (${side}x${side}), sizes 16 to 1024 and veloce-app-icon.png in $logo_dir"

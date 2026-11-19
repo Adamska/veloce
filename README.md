@@ -40,7 +40,7 @@ sudo apt install libavcodec-dev libavformat-dev libavutil-dev libavdevice-dev \
 ### Build and run
 
 ```sh
-cargo run --release                       # welcome screen
+cargo run --release                       # welcome screen with recent files
 cargo run --release -- --demo             # built-in 4K scrubbing demo
 cargo run --release -- movie.mkv          # one or more files or URLs
 cargo run --release -- https://example.com/live/index.m3u8
@@ -55,6 +55,8 @@ cargo run --release -- https://example.com/live/index.m3u8
 | `--cache-mb <N>` | Memory budget of the frame ring buffer in MiB (default 3072) |
 
 `VELOCE_CACHE_MB` sets the same budget from the environment. `VELOCE_HWACCEL` selects the video decoder: unset picks automatically, `on` forces hardware decoding and `off` forces software decoding.
+
+The welcome screen lists the files played recently, newest first, and hides any that no longer exist on disk. Click one to play it again, or hover it and press the cross to forget it. The list is stored in `~/Library/Application Support/Veloce/recent` on macOS, `%APPDATA%\Veloce\recent` on Windows and `~/.local/share/veloce/recent` on Linux.
 
 Files can also be dropped onto the window. Dropping media replaces the queue, or appends to it while the playlist drawer is open. Dropping an `.srt`, `.vtt` or `.ass` file loads it as a subtitle track. Subtitle files that share the media file name are picked up automatically, including tagged ones such as `Movie.fr.srt` or `Movie.en.forced.srt`.
 
@@ -71,7 +73,7 @@ The installed app appears in Launchpad and Spotlight, and in Finder's **Open Wit
 
 To make Veloce the default player for a format, select a file of that type in Finder, choose **File > Get Info**, pick Veloce under **Open with** and click **Change All**.
 
-The app icon and every logo size in `assets/logo` come from `assets/logo/veloce.png`. After replacing that image, run `scripts/render-logo.sh` to trim it and regenerate the sizes and `assets/macos/AppIcon.icns`, which keeps the artwork inside Apple's 824 of 1024 px icon grid so it sits level with other apps in the Dock. It needs ImageMagick.
+The app icon and every logo size in `assets/logo` come from `assets/logo/veloce.png`. After replacing that image, run `scripts/render-logo.sh` to trim it and regenerate the sizes and `assets/macos/AppIcon.icns`, which places the logo on a squircle tile in Apple's 824 of 1024 px icon grid. A full tile matters on macOS 26 and later, which otherwise shrinks the icon into a grey container. The tile alone is kept as `assets/logo/veloce-app-icon.png`. It needs ImageMagick.
 
 The bundle links the FFmpeg libraries installed by Homebrew and is signed ad hoc, so it is meant for the machine that built it. Running the script again replaces the installed copy; quit Veloce first. To uninstall, delete `/Applications/Veloce.app`.
 

@@ -49,6 +49,7 @@ impl Player {
                 self.set_paused(false);
                 if item.location != DEMO_LOCATION && !is_network_location(&item.location) {
                     self.subtitles.load_sidecars(Path::new(&item.location));
+                    self.recent.record(Path::new(&item.location));
                 }
             }
             Err(error) => self.report_error(format!("Cannot open {}: {error:#}", item.title)),

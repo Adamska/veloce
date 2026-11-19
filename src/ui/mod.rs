@@ -5,8 +5,10 @@ mod hud;
 pub mod icons;
 mod inspector;
 pub mod layer;
+pub mod logo;
 mod network_dialog;
 mod playlist;
+mod recent_list;
 mod scrubber;
 mod subtitle_panel;
 pub mod theme;
@@ -60,6 +62,7 @@ pub struct Interface {
     toasts: toast::Toasts,
     last_activity: f64,
     hud_visible: bool,
+    logo: Option<egui::TextureHandle>,
 }
 
 impl Interface {
@@ -136,7 +139,11 @@ impl Interface {
         }
 
         if !player.has_session() {
-            welcome::show(&ctx, actions);
+            if self.logo.is_none() {
+                self.logo = logo::texture(&ctx);
+            }
+            let recent = player.recent().available();
+            welcome::show(&ctx, self.logo.as_ref(), &recent, actions);
         } else if view.displayed.is_none() {
             let painter = ctx.layer_painter(LayerId::new(Order::Background, Id::unique("status")));
             painter.text(

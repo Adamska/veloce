@@ -27,6 +27,21 @@ pub fn classify(paths: Vec<PathBuf>) -> Dropped {
     }
 }
 
+/// Per-user directory for state that should survive restarts, such as recent files.
+pub fn data_dir() -> Option<PathBuf> {
+    let home = || std::env::var_os("HOME").map(PathBuf::from);
+    if cfg!(target_os = "macos") {
+        return home().map(|home| home.join("Library/Application Support/Veloce"));
+    }
+    if cfg!(windows) {
+        return std::env::var_os("APPDATA").map(|data| PathBuf::from(data).join("Veloce"));
+    }
+    std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| home().map(|home| home.join(".local/share")))
+        .map(|data| data.join("veloce"))
+}
+
 pub fn pick_media() -> Option<Vec<String>> {
     let files = rfd::FileDialog::new()
         .set_title("Open media")

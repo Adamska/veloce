@@ -15,7 +15,7 @@ use winit::{
 use super::{AppEvent, files, icon, options::Options};
 use crate::{
     gpu::{GpuContext, VideoPipeline, snapshot},
-    player::{Command, Player},
+    player::{Command, Player, RecentFiles},
     ui::{Action, EguiLayer, Interface},
 };
 
@@ -67,6 +67,15 @@ impl Viewport {
         let egui = EguiLayer::new(&window, &gpu.device, gpu.format());
         let video = VideoPipeline::new(&gpu.device, gpu.format());
         let mut player = Player::new(gpu.capabilities, options.cache_limits());
+        if let Some(directory) = files::data_dir() {
+            let waker = waker.clone();
+            player.set_recent(RecentFiles::persistent(
+                directory.join("recent"),
+                move || {
+                    let _ = waker.send_event(AppEvent::Redraw);
+                },
+            ));
+        }
         if options.mute {
             player.execute(Command::ToggleMute);
             player.take_notices();

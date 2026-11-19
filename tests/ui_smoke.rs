@@ -9,7 +9,7 @@ use support::Stage;
 use veloce::{
     engine::CacheLimits,
     gpu::{FrameSelection, GpuCapabilities},
-    player::{Command, Player},
+    player::{Command, Player, RecentFiles},
     ui::{Action, Interface, filters_panel::Tab},
 };
 
@@ -72,6 +72,27 @@ fn every_surface_lays_out_without_spurious_actions() {
     stage.settle(&mut interface, &idle, None);
     stage.save("02-network");
     drop(idle);
+
+    let mut returning = Player::new(capabilities, CacheLimits::default());
+    let mut recent = RecentFiles::default();
+    let directory = std::env::temp_dir().join(format!("veloce-recent-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&directory);
+    for name in [
+        "Interstellar (2014) 2160p HDR10 DTS-HD MA 5.1 Remux.mkv",
+        "Planet Earth II - S01E03 - Jungles.mkv",
+        "Keynote rehearsal.mov",
+        "Kind of Blue - So What.flac",
+    ] {
+        let path = directory.join(name);
+        let _ = std::fs::write(&path, b"");
+        recent.record(&path);
+    }
+    returning.set_recent(recent);
+    let mut interface = Interface::default();
+    stage.settle(&mut interface, &returning, None);
+    stage.save("01b-welcome-recent");
+    let _ = std::fs::remove_dir_all(directory);
+    drop(returning);
 
     let (mut player, selection) = paused_demo();
     let mut interface = Interface::default();

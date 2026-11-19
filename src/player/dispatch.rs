@@ -115,6 +115,8 @@ impl Player {
                 self.start(0);
             }
             Command::Open(_) => {}
+            Command::ForgetRecent(path) => self.recent.forget(&path),
+            Command::ClearRecent => self.recent.clear(),
             Command::Enqueue(locations) => {
                 let first_new = self.playlist.items().len();
                 self.playlist.extend(locations);

@@ -2,6 +2,7 @@ pub mod command;
 mod dispatch;
 pub mod playlist;
 mod presenter;
+pub mod recent;
 pub mod session;
 pub mod subtitles;
 mod transport;
@@ -13,6 +14,7 @@ use std::{
 
 pub use command::{Command, SubtitleSelection};
 pub use playlist::{DEMO_LOCATION, Playlist, PlaylistItem, RepeatMode};
+pub use recent::{RecentEntry, RecentFiles};
 pub use subtitles::SubtitleState;
 
 use crate::{
@@ -36,6 +38,7 @@ pub struct Player {
     capabilities: GpuCapabilities,
     cache_limits: CacheLimits,
     pub playlist: Playlist,
+    recent: RecentFiles,
     pub subtitles: SubtitleState,
     pub adjustments: VideoAdjustments,
     pub geometry: Geometry,
@@ -63,6 +66,7 @@ impl Player {
             capabilities,
             cache_limits,
             playlist: Playlist::default(),
+            recent: RecentFiles::default(),
             subtitles: SubtitleState::default(),
             adjustments: VideoAdjustments::default(),
             geometry: Geometry::default(),
@@ -78,6 +82,14 @@ impl Player {
             presented: None,
             notices: Vec::new(),
         }
+    }
+
+    pub fn recent(&self) -> &RecentFiles {
+        &self.recent
+    }
+
+    pub fn set_recent(&mut self, recent: RecentFiles) {
+        self.recent = recent;
     }
 
     pub fn info(&self) -> Option<&MediaInfo> {
