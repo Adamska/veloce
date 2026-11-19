@@ -10,12 +10,15 @@ readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.104"
+bytemuck = { version = "1.25.2", features = ["derive"] }
+crossbeam-channel = "0.5.17"
 egui = "0.37.0"
 egui-wgpu = "0.37.0"
 egui-winit = "0.37.0"
 env_logger = "0.11.11"
 log = "0.4.35"
 parking_lot = "0.13.0"
+png = "0.18.1"
 pollster = "1.0.3"
 wgpu = "30"
 winit = "0.30"
