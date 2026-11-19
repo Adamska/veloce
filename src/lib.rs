@@ -1,4 +1,5 @@
 pub mod app;
+pub mod audio;
 pub mod demo;
 pub mod engine;
 pub mod gpu;
