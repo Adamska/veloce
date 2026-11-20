@@ -17,17 +17,11 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue"></a>
 </p>
 
-<!--
-Recording: target/readme-media/veloce-hops.mp4, made by scripts/readme-media.sh and hosted as a
-GitHub attachment. To show it, move the two blocks below out of this comment and replace
-VIDEO_LINK_GOES_HERE with the https://github.com/user-attachments/assets/... link, alone on its line.
-
-VIDEO_LINK_GOES_HERE
+https://github.com/user-attachments/assets/8bb96086-bb57-4605-99d6-428192ca0703
 
 <p align="center">
   <sub>Five +5 s and three −5 s presses during playback, recorded from the running app in real time. Each press shows the exact frame at the target.</sub>
 </p>
--->
 
 ## Why Veloce
 
