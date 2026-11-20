@@ -1,92 +1,187 @@
-<p align="center"><img src="assets/logo/veloce-256.png" width="128" height="128" alt="Veloce logo"></p>
+<p align="center">
+  <img src="assets/logo/veloce-256.png" width="112" height="112" alt="Veloce logo">
+</p>
 
-# Veloce
+<h1 align="center">Veloce</h1>
 
-Veloce is a native, GPU-accelerated media player written in Rust. It is built around one idea: scrubbing, frame stepping and speed changes should be answered from memory instead of from the decoder. A sliding window of decoded frames and audio stays resident around the playhead, so a `+5s` or `-5s` tap that lands inside the window is a lookup, not a demuxer seek.
+<p align="center">
+  <strong>A native, GPU-accelerated media player in Rust where jumping 5 or 30 seconds lands on the exact frame, instantly.</strong>
+</p>
 
-It plays local files and network streams through FFmpeg, picks the faster of hardware and threaded software decoding for each file, renders video and interface in a single `wgpu` pass, and keeps dialogue at its natural pitch from `0.25x` to `4.0x`.
+<p align="center">
+  <img alt="Rust 2024" src="https://img.shields.io/badge/Rust-2024_edition-b7410e?logo=rust&logoColor=white">
+  <img alt="FFmpeg 7" src="https://img.shields.io/badge/FFmpeg-7.1-0b7a0b?logo=ffmpeg&logoColor=white">
+  <img alt="wgpu" src="https://img.shields.io/badge/GPU-wgpu_30-4b5bd6">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-100_headless-1baf7a">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS-555">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue"></a>
+</p>
 
-## Highlights
+<!--
+Recording: target/readme-media/veloce-hops.mp4, made by scripts/readme-media.sh and hosted as a
+GitHub attachment. To show it, move the two blocks below out of this comment and replace
+VIDEO_LINK_GOES_HERE with the https://github.com/user-attachments/assets/... link, alone on its line.
 
-- Seeks inside the buffered window resolve in well under a microsecond and never flush the decoder.
-- Repeated `5s` and `30s` hops are answered by speculative decoders that already hold the exact frame at the next few landing positions. No approximate or keyframe-only frame is ever shown.
-- Bursts of out-of-window seeks preempt each other; only the final target is decoded to completion.
-- Audio is the master clock. Video frames are selected against it on every display refresh.
-- Pitch-preserving time stretching (Signalsmith Stretch), 10-band equalizer, preamp, 200 % volume.
-- Smart silence skipper that accelerates quiet passages in lectures and podcasts.
-- NV12, P010, YUV420P and 10-bit YUV420P straight to the GPU, with BT.601/709/2020 matrices and ACES filmic tone mapping for PQ and HLG sources.
-- Picture controls, aspect and crop presets, zoom, pan, rotation, mirroring, deinterlacing and optional frame blending at `2.0x` and above.
-- SRT, WebVTT and ASS subtitles (embedded or external), with live delay adjustment.
-- A-B loop, lossless PNG snapshots, chapters on the scrubber, playlist with shuffle and repeat.
-- A built-in procedural 4K 60 fps stream for testing without any media file.
+VIDEO_LINK_GOES_HERE
 
-## Quick start
+<p align="center">
+  <sub>Five +5 s and three −5 s presses during playback, recorded from the running app in real time. Each press shows the exact frame at the target.</sub>
+</p>
+-->
 
-### Requirements
+## Why Veloce
 
-- Rust 1.88 or newer.
-- FFmpeg development libraries and `pkg-config` (developed against FFmpeg 7.1).
-- A C++ toolchain and libclang (used to build the time-stretching library).
+Most players answer a jump by asking the decoder to start over from the nearest keyframe, so repeated taps on the arrow keys stall, or show a nearby frame first and correct it later. Veloce keeps the decoded frames and audio around the playhead in memory and decodes the places you are likely to jump to before you press the key. A jump becomes a memory lookup, and the frame on screen is always the exact one.
+
+| | |
+| ---: | :--- |
+| **0.4 µs** | to answer a jump that lands inside the decoded window |
+| **40 of 40** | rapid `+5 s` presses whose exact frame was already decoded when the key went down (1080p, one press every 90 ms) |
+| **63 ms** | median jump to a random point of a 1080p H.264 clip with 10 s keyframe spacing, down from 412 ms |
+| **9.4×** | faster decoding of 1080p H.264, by choosing the decoder per file instead of always using the hardware one |
+| **0** | approximate or keyframe-only frames ever shown, by design |
+
+## Benchmarks
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/benchmarks-dark.svg">
+  <img src="docs/media/benchmarks-light.svg" width="100%" alt="Cold seek median drops from 412 ms to 63 ms; rapid 5 s hops whose frame never appeared drop from 72 of 80 to 1 of 80; software decoding of 1080p H.264 runs at 1,965 fps against 210 fps for VideoToolbox">
+</picture>
+
+The benchmark is a headless driver for the same engine the player uses, and it fails if any jump shows a frame other than the one at the target. Full tables for four kinds of content, the method and the commands to reproduce them are in [docs/performance.md](docs/performance.md).
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/player.jpg" alt="Playback with the control capsule: scrubber with chapter marks, speed, volume and panel buttons"><br><sub><b>Playback.</b> A translucent control capsule that fades away while you watch.</sub></td>
+    <td width="50%"><img src="docs/media/subtitles.jpg" alt="A subtitle rendered over the film"><br><sub><b>Subtitles.</b> SRT, WebVTT and ASS, embedded or external. The track choice follows you to the next file.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/inspector.jpg" alt="The codec and performance inspector over the film"><br><sub><b>Inspector.</b> Live codec, decoder, buffer and sync counters, including how many jumps were prepared in advance.</sub></td>
+    <td width="50%"><img src="docs/media/filters.jpg" alt="The video filters drawer"><br><sub><b>Picture and audio.</b> Grading, crop, zoom, rotation, a 10-band equalizer and a silence skipper.</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/media/welcome.jpg" alt="The welcome screen with the logo, open buttons and recently played files"><br><sub><b>Welcome screen.</b> Recently played files, newest first. Files that no longer exist are hidden.</sub></td>
+  </tr>
+</table>
+
+## Features
+
+- **Exact, instant jumps.** `±5 s` and `±30 s` from the keyboard, frame stepping, and a scrubber with chapter marks. Bursts of jumps cancel each other, so only the last one is decoded.
+- **Speed without chipmunks.** `0.25×` to `4.0×` with the pitch preserved, plus a silence skipper that speeds through quiet passages in lectures and podcasts.
+- **Picture.** Hardware or threaded software decoding, 8 and 10-bit video straight to the GPU, BT.601/709/2020, HDR10 and HLG tone mapping, grading, sharpening, deinterlacing, aspect, crop, zoom, pan, rotation and mirroring.
+- **Sound.** Multiple audio tracks, a 10-band equalizer with presets, volume up to 200 % and audio delay in 25 ms steps.
+- **Subtitles.** Embedded and external tracks, sidecar files such as `Movie.fr.srt` picked up automatically, delay in 50 ms steps, adjustable size, position and backdrop.
+- **Everyday tools.** A-B loop, lossless PNG snapshots, playlist with shuffle and repeat, network streams (HTTP, HLS, RTSP), drag and drop, and VLC-style keyboard shortcuts.
+- **A real Mac app.** Opens from Finder and the Dock, appears in **Open With**, and has a native icon in every appearance of macOS 26 and later.
+
+## How it works
+
+```mermaid
+flowchart LR
+    key(["Key press: +5 s"]) --> window{"Target inside the<br/>decoded window?"}
+    window -- yes --> move["Move the playhead<br/>0.4 µs"]
+    window -- no --> pad{"A speculative decoder<br/>already holds it?"}
+    pad -- yes --> swap["Swap its frames in<br/>constant time"]
+    pad -- no --> cold["Seek to the keyframe and<br/>decode up to the exact frame"]
+    move --> shown(["Exact frame on the next refresh"])
+    swap --> shown
+    cold --> shown
+```
+
+1. **A window of decoded frames.** Up to ten seconds behind and twenty-five ahead of the playhead stay in memory, with the matching audio. A jump inside it is a binary search.
+2. **Speculative decoders.** Four extra decoders wake up after a jump and prepare the exact frames where the next presses are likely to land: after a `+5 s` jump, at `+5`, `+10`, `+15` and `-5` seconds from there. When a jump lands on one, its frames are swapped into the window and it becomes the main decoder.
+3. **Audio is the clock.** The audio callback publishes the playback position through a lock-free seqlock, and the render thread picks the frame for that time on every display refresh.
+
+```mermaid
+flowchart LR
+    subgraph decode["Decode threads: 1 main + 4 speculative"]
+        demux["Demux"] --> video["Video decode<br/>VideoToolbox or software"]
+        demux --> audio["Audio decode<br/>and resample"]
+    end
+    video --> frames[("Frame window")]
+    audio --> pcm[("Audio timeline")]
+    pcm --> dsp["DSP thread<br/>EQ, silence skip, time stretch"]
+    dsp --> callback["Audio callback<br/>master clock"]
+    callback -. "clock (seqlock)" .-> render["Render thread<br/>wgpu video + egui interface"]
+    frames --> render
+```
+
+The full design, including memory budgets, the seek protocol and the decoder selection rule, is in [docs/architecture.md](docs/architecture.md).
+
+## Engineering highlights
+
+- **About 11,800 lines of Rust in 87 modules**, none longer than 250 lines, with no `unwrap()` outside tests.
+- **100 headless tests**: offscreen GPU rendering including HDR10 tone mapping, an FFmpeg decode and seek round trip, the player end to end, pitch preservation across speeds, A/V marker alignment, and a layout pass over every interface surface.
+- **Correctness enforced by the benchmark.** It fails on any frame that is not the exact target, and on any gap in the decoded window.
+- **Concurrency without stalls.** Every seek takes a fresh epoch and is decided atomically, so frames and audio from an abandoned seek are recognized and dropped. Audio reaches the output callback through a lock-free single-producer ring, and the clock reaches the render thread through a seqlock.
+- **Measured, not assumed.** Profiling showed VideoToolbox about nine times slower than FFmpeg's frame-threaded decoder for 1080p H.264 on an M1 Max, so the decoder is chosen per file.
+- **A custom WGSL shader.** Bit-depth-aware YUV conversion, PQ and HLG linearization, BT.2020 to BT.709 gamut mapping, ACES filmic tone mapping and grading in one pass.
+- **Reproducible visuals.** The screenshots and the recording above are rendered by a test that drives the real player offscreen ([scripts/readme-media.sh](scripts/readme-media.sh)).
+
+| Area | Built with |
+| --- | --- |
+| Demux and decode | FFmpeg 7 via `ffmpeg-next`; VideoToolbox, D3D11VA, NVDEC and VAAPI |
+| Rendering | `wgpu` 30 and WGSL |
+| Interface | `egui` 0.37 and `winit` 0.30 |
+| Audio | `cpal`, Signalsmith Stretch and a custom biquad equalizer |
+| macOS | `objc2` for Apple Events; Icon Composer and `actool` for the icon |
+
+## Getting started
+
+### macOS app
 
 ```sh
-# macOS
 brew install ffmpeg pkg-config
+scripts/macos/bundle.sh --install
+```
 
+Veloce is then in `/Applications`, Launchpad and Spotlight, and in Finder's **Open With** menu for video and audio files. To make it the default player for a format, select a file in Finder, choose **File > Get Info**, pick Veloce under **Open with** and click **Change All**. The bundle links Homebrew's FFmpeg and is signed ad hoc, so it runs on the machine that built it.
+
+### From source
+
+Requirements: Rust 1.88 or newer, the FFmpeg development libraries with `pkg-config`, and a C++ toolchain with libclang for the time-stretching library.
+
+```sh
 # Debian / Ubuntu
 sudo apt install libavcodec-dev libavformat-dev libavutil-dev libavdevice-dev \
   libavfilter-dev libswscale-dev libswresample-dev pkg-config clang libasound2-dev
 ```
 
-### Build and run
-
 ```sh
-cargo run --release                       # welcome screen with recent files
-cargo run --release -- --demo             # built-in 4K scrubbing demo
+cargo run --release                       # welcome screen
 cargo run --release -- movie.mkv          # one or more files or URLs
 cargo run --release -- https://example.com/live/index.m3u8
+cargo test                                # headless test suite
 ```
+
+<details>
+<summary><b>Command-line options and environment</b></summary>
 
 | Option | Effect |
 | --- | --- |
-| `--demo` | Start the procedural 4K 60 fps benchmark stream |
 | `--mute` | Start with audio muted |
 | `--paused` | Open media without starting playback |
 | `--inspector` | Show the codec and performance inspector on launch |
-| `--cache-mb <N>` | Memory budget of the frame ring buffer in MiB (default 3072) |
+| `--cache-mb <N>` | Memory budget of the frame window in MiB (default 3072) |
+| `--demo` | Play the built-in procedural 4K 60 fps stream used for benchmarks |
 
 `VELOCE_CACHE_MB` sets the same budget from the environment. `VELOCE_HWACCEL` selects the video decoder: unset picks automatically, `on` forces hardware decoding and `off` forces software decoding.
 
-The welcome screen lists the files played recently, newest first, and hides any that no longer exist on disk. Click one to play it again, or hover it and press the cross to forget it. The list is stored in `~/Library/Application Support/Veloce/recent` on macOS, `%APPDATA%\Veloce\recent` on Windows and `~/.local/share/veloce/recent` on Linux.
+</details>
 
-Files can also be dropped onto the window. Dropping media replaces the queue, or appends to it while the playlist drawer is open. Dropping an `.srt`, `.vtt` or `.ass` file loads it as a subtitle track. Subtitle files that share the media file name are picked up automatically, including tagged ones such as `Movie.fr.srt` or `Movie.en.forced.srt`.
-
-The subtitle choice carries over from one file to the next. When a new file opens, Veloce looks for the track closest to the one shown in the previous file: same language first (ISO codes and language names are treated alike, so `fre`, `fr` and `French` match), then the same title and flags such as forced or SDH, across embedded tracks and sidecar files. Turning subtitles off is remembered too.
-
-### macOS app
-
-```sh
-scripts/macos/bundle.sh             # builds target/release/bundle/Veloce.app
-scripts/macos/bundle.sh --install   # also installs to /Applications and registers it with Finder
-```
-
-The installed app appears in Launchpad and Spotlight, and in Finder's **Open With** menu for video and audio files, including MKV, WebM, AVI, FLV and FLAC. Files can be dropped on the Dock icon. Opening a file while Veloce is running plays it in the existing window.
-
-To make Veloce the default player for a format, select a file of that type in Finder, choose **File > Get Info**, pick Veloce under **Open with** and click **Change All**.
-
-The app icon and every logo size in `assets/logo` come from `assets/logo/veloce.png`. After replacing that image, run `scripts/render-logo.sh` to trim it and regenerate the sizes. The bundle script compiles `assets/macos/AppIcon.icon`, an Icon Composer document whose logo layer the render script refreshes, into `Assets.car` with Xcode's `actool`. That is the only format macOS 26 and later draw natively, including the tinted and clear appearances; a plain `.icns` is shown shrunk inside a grey tile. Without Xcode the bundle falls back to the legacy `assets/macos/AppIcon.icns`. The render script needs ImageMagick.
-
-The bundle links the FFmpeg libraries installed by Homebrew and is signed ad hoc, so it is meant for the machine that built it. Running the script again replaces the installed copy; quit Veloce first. To uninstall, delete `/Applications/Veloce.app`.
-
-## Keyboard map
+<details>
+<summary><b>Keyboard shortcuts</b></summary>
 
 | Key | Action |
 | --- | --- |
 | `Space` | Play / pause |
-| `Left` / `Right` | Seek 5 s back / forward |
-| `Shift` + `Left` / `Right` | Seek 30 s back / forward |
+| `Left` / `Right` | Jump 5 s back / forward |
+| `Shift` + `Left` / `Right` | Jump 30 s back / forward |
 | `,` / `.` | Previous / next frame |
-| `[` / `]` | Slower / faster (0.25x to 4.0x) |
-| `=` | Reset speed to 1.0x |
+| `[` / `]` | Slower / faster (0.25× to 4.0×) |
+| `=` | Reset speed to 1.0× |
 | `Up` / `Down` | Volume up / down (to 200 %) |
 | `M` | Mute |
 | `F` | Fullscreen (also double-click) |
@@ -101,178 +196,18 @@ The bundle links the FFmpeg libraries installed by Homebrew and is signed ad hoc
 | `Cmd/Ctrl` + `I` | Codec and performance inspector |
 | `Cmd/Ctrl` + `L` | Playlist drawer |
 | `Cmd/Ctrl` + `O` | Open file |
-| `Cmd/Ctrl` + `U` | Open network stream (HTTP, HTTPS, HLS, RTSP) |
-| `Cmd/Ctrl` + `S` | Save a PNG snapshot of the current frame |
+| `Cmd/Ctrl` + `U` | Open network stream |
+| `Cmd/Ctrl` + `S` | Save a PNG snapshot of the current frame to `~/Pictures/Veloce` |
 | `Esc` | Close the open drawer, or leave fullscreen |
 
-Snapshots are written to `~/Pictures/Veloce`.
+</details>
 
-The control capsule keeps the common controls visible. The subtitle button opens a floating, draggable subtitle window with track selection, file loading, delay and appearance. The A-B loop and audio track buttons appear after pressing the More button, which stays highlighted while a loop is active. Right-clicking the audio track button opens the audio options.
+## Status and limitations
 
-## Architecture
+Veloce is developed and measured on macOS with Apple silicon. The Windows and Linux hardware decoding paths compile but have not been exercised. Bitmap subtitles (PGS, VobSub) are not rendered yet, and ASS styling is reduced to plain text. The complete list is in [docs/architecture.md](docs/architecture.md#limitations).
 
-```
-                 +--------------------- decode thread ----------------------+
- file / URL ---> | Demuxer -> VideoDecoder (VideoToolbox, D3D11VA, NVDEC,   |
- or demo source  |            VAAPI, or threaded software) -> FrameConverter |
-                 |         -> AudioDecoder -> resampler (stereo f32)        |
-                 |         -> SubtitleDecoder                               |
-                 +-------+----------------------+----------------+----------+
-                         |                      |                |
-                         v                      v                v
-                   FrameCache             AudioTimeline     subtitle cues
-              (frames around the       (PCM for the same    (to the player)
-                   playhead)                window)
-                         |                      |
-     render thread       |                      |      DSP thread
-  +----------------------+------+     +---------+----------------------+
-  | PlaybackClock.tick()        |     | equalizer -> silence detector  |
-  | FrameCache.frame_at(t)      |     | -> time stretcher -> SPSC ring |
-  | wgpu: video quad + egui HUD |     +---------------+----------------+
-  +-------------^---------------+                     |
-                |                                     v
-                |   clock anchor (seqlock)    audio callback (cpal)
-                +-------------------------- gain, soft clip, timing
-```
-
-### Predictive ring buffer
-
-`engine::FrameCache` holds a contiguous run of decoded frames in presentation order, targeting ten seconds behind and twenty-five seconds ahead of the playhead. Lookups take a read lock, binary search the run and clone an `Arc`. Audio for the same span lives in `engine::AudioTimeline`, indexed by sample, so an in-window seek repositions sound as cheaply as picture.
-
-`engine::SessionShared` decides every seek atomically, in this order:
-
-1. **The window covers the target**: the playhead moves, a new epoch is issued, nothing else happens.
-2. **A speculative decoder holds the target**: its frames and audio are exchanged into the window in constant time and that decoder becomes the main one. It carries on decoding from where it is, so nothing is decoded twice.
-3. **A speculative decoder is on its way to the target**: it is promoted as it is and finishes the job, instead of starting over.
-4. **Otherwise**: the request goes to a single pending slot. A request still waiting when the next arrives is overwritten, and one already being decoded is abandoned as soon as a newer one is taken, so only the last target of a burst is decoded to completion.
-
-On a cold seek the demuxer goes to the keyframe at or before the target, using the container index read at open (refreshed after the first seek for containers that load it lazily). Frames before the target are decoded but never downloaded from a hardware surface, and frames nothing else depends on are skipped inside the decoder. The frame shown is always the exact frame at the target.
-
-### Speculative hops
-
-Local files open four extra decoders (`engine::speculation`). They stay idle during ordinary playback and wake for five seconds after any seek, and while paused. Each one keeps a short pad of exact frames and audio at a predicted landing position:
-
-- after a keyboard hop of stride `s`: `+s`, `+2s`, `+3s` and `-s` from the new position, which covers a held key and a change of mind;
-- after any other seek: `+5s`, `-5s`, `+10s` and `+30s`.
-
-Pads follow the playhead while playback continues. When a hop lands on one, step 2 above applies and the frame is on screen at the next refresh. The retired decoder is then pointed at the far end of the prediction, so a held key keeps finding prepared frames as long as the machine can decode one pad per key repeat.
-
-Work is prioritized: the frame just requested comes first, the pad for the next hop second, the remaining pads third, and deep read-ahead last.
-
-### Decoder selection
-
-`VideoDecoder` chooses per file. On the test machine FFmpeg's frame-threaded software decoder measured about nine times faster than VideoToolbox for 1080p H.264 (1965 fps against 210 fps), so 8-bit H.264 up to 1440p uses software on machines with six or more cores. The same rule is applied, without having been measured, to MPEG-2, MPEG-4, VC-1, VP8 and VP9. Everything else (HEVC, 10-bit, 4K) uses VideoToolbox, D3D11VA, NVDEC or VAAPI, with software as the fallback.
-
-### Memory
-
-The window is bounded by a memory budget because uncompressed frames are large. Each speculative pad takes one sixteenth of the budget and the main window gets the rest (2304 MiB of the default 3 GiB for local files):
-
-| Content | Frame size | Main window |
-| --- | --- | --- |
-| 1080p 24 fps, 8-bit | 3.0 MiB | about -9.2 s / +23.1 s |
-| 1080p 60 fps, 8-bit | 3.0 MiB | about -6.0 s / +6.9 s |
-| 2160p 30 fps, 10-bit | 23.7 MiB | about -1.6 s / +1.6 s |
-| 2160p 60 fps, 8-bit | 11.9 MiB | about -1.6 s / +1.6 s |
-
-The budget is shared evenly between history and lookahead until each side holds six seconds, so a `5s` hop in either direction stays inside the window whenever memory allows; the remainder goes to lookahead. At least 1.5 s of lookahead is always kept, and pads keep at least 0.25 s, even above the budget, so audio never starves. At 4K this can exceed the budget by a few hundred MiB while the speculative decoders are awake.
-
-### Clock and A/V sync
-
-The audio callback publishes an anchor (media time, monotonic timestamp, rate) through a seqlock after every buffer. `engine::PlaybackClock` extrapolates from the latest anchor and filters callback jitter with a small proportional correction, snapping only when the error exceeds 40 ms. Every block the DSP thread queues carries the media time it represents, corrected for the time stretcher's latency at the current speed, so the clock stays truthful through speed changes, silence skipping and audio delay adjustments.
-
-After a seek the clock holds the target until audio belonging to the new epoch is actually playing, and audio does not start until the target frame has been selected for display. Without an output device the same renderer is driven by a timer, so video-only playback uses the identical path.
-
-### Audio chain
-
-`equalizer` (ten peaking biquads plus preamp) -> `silence` (RMS detector with hold, attack and release) -> `stretcher` (Signalsmith Stretch) -> lock-free ring -> callback (gain ramp, soft clipper above unity, channel mapping). Volume and mute are applied in the callback, so they respond within one buffer.
-
-### Rendering
-
-`gpu::VideoPipeline` uploads decoder planes at their native stride into `R8`/`RG8` or `R16`/`RG16` textures and draws one quad. `shaders/video.wgsl` performs the matrix conversion with bit-depth aware quantization, PQ or HLG linearization, BT.2020 to BT.709 gamut mapping, ACES filmic tone mapping, grading (brightness, contrast, saturation, hue, gamma), unsharp masking, linear-blend deinterlacing and optional blending with the previous frame. The interface is drawn by `egui` in the same render pass. Snapshots re-render the current frame at source resolution into an offscreen target and encode it as PNG on a worker thread.
-
-### Source layout
-
-| Path | Responsibility |
-| --- | --- |
-| `src/media` | Frame, audio chunk, stream metadata and the `MediaSource` trait |
-| `src/demo` | Procedural 4K 60 fps video and multi-tone audio generator |
-| `src/engine` | Demuxer, decoders, hardware acceleration, ring buffer, audio timeline, clock, decode lanes and speculation |
-| `src/audio` | Device output, callback renderer, DSP thread, time stretcher, equalizer, silence detector |
-| `src/gpu` | Device and surface, video pipeline, uniforms, geometry, snapshots, WGSL shader |
-| `src/subtitles` | SRT, VTT and ASS parsing, time-indexed tracks, overlay renderer |
-| `src/player` | Sessions, commands, transport, playlist, subtitle state, frame selection |
-| `src/ui` | Control capsule, scrubber, drawers, inspector, toasts, theme |
-| `src/app` | Window, event loop, keyboard map, file handling, macOS document events |
-
-## Performance
-
-Measured with `examples/seek_bench.rs`, a headless driver for the same engine the player uses. Release build, Apple M1 Max (10 cores), 64 GB, macOS, FFmpeg 7.1, default 3 GiB budget. The clips were generated with FFmpeg from `testsrc2`: a film-like x264 encode with B-frames and ten-second keyframe spacing, a 60 fps encode with two-second spacing, and a 10-bit HEVC 4K encode with two-second spacing.
-
-A press counts as **instant** when the exact frame was already decoded at the moment the key was pressed.
-
-| Measurement | Procedural 4K 60 | H.264 1080p 24 | H.264 1080p 60 | HEVC 10-bit 2160p 30 |
-| --- | --- | --- | --- | --- |
-| Decoder chosen | generator | software | software | VideoToolbox |
-| Window fill rate | 746 fps | 1965 fps (82x) | 1683 fps (28x) | 133 fps (4.4x) |
-| In-window seek, median | 0.4 us | 0.5 us | 0.4 us | 0.4 us |
-| Cold random seek to exact frame, median | 0.6 ms | 63 ms | 43 ms | 75 ms |
-| Cold random seek, slowest | 12 ms | 114 ms | 74 ms | 147 ms |
-| `+5s` x40, one press every 90 ms: instant | 40 | 40 | 40 | 40 |
-| `-5s` x40, one press every 90 ms: instant | 40 | 36 | 40 | 40 |
-| `+30s`, one press every 90 ms: instant | 19 of 19 | 6 of 9 | 7 of 7 | 6 of 7 |
-| `+5s` x40, one press every 33 ms: instant | 40 | 9 | 15 | 21 |
-
-Every press in the 90 ms rows that was not instant still showed its exact frame before the next press, except one each in the two H.264 1080p 24 rows. The benchmark fails if any hop shows a frame other than the one covering the target, or leaves a gap in the window.
-
-For comparison, the same film clip with the earlier behaviour (hardware decoding forced, no speculative decoders):
-
-| Measurement | Before | Now |
-| --- | --- | --- |
-| Cold random seek, median | 412 ms | 63 ms |
-| `+5s` x40 every 90 ms: frames never shown before the next press | 35 | 0 |
-| `-5s` x40 every 90 ms: frames never shown before the next press | 37 | 1 |
-
-Reading the numbers:
-
-- An in-window seek is a lock, a binary search and a reference count increment. The frame reaches the screen on the next refresh, at most 8.3 ms later at 120 Hz.
-- A cold seek costs a container seek plus decoding the dependency chain from the preceding keyframe. That chain cannot be skipped without showing an inexact frame, so it sets the floor for the first press of a new pattern.
-- A held key is sustained as long as one pad can be decoded per key repeat. At a 33 ms repeat that is beyond this machine for long keyframe intervals; presses that cannot be prepared in time are still decoded exactly, never approximated.
-- Fill rate bounds sustained playback speed.
-
-Reproduce:
-
-```sh
-cargo run --release --example seek_bench -- --demo
-cargo run --release --example seek_bench -- /path/to/file.mkv
-cargo run --release --example seek_bench -- --lanes 0 /path/to/file.mkv   # without speculation
-```
-
-The inspector (`Cmd/Ctrl` + `I`) shows the same counters live: window extent, memory in use, seek hits (and how many were prepared), resolve time, seek-to-frame latency, dropped frames and clock correction.
-
-## Tests
-
-```sh
-cargo test
-```
-
-The suite is headless. It covers the ring buffer, seek coalescing and prepared hops in both directions, the clock, the audio timeline, pitch preservation across the speed range, marker alignment between the DSP thread and the callback, subtitle parsing and the carried-over track choice, color matrices, offscreen GPU rendering including HDR10 tone mapping, an FFmpeg decode and seek round trip, the player end to end on the demo stream, and a layout pass over every interface surface. The player and interface tests open the audio device at zero volume; tests that need the `ffmpeg` binary or a GPU adapter skip themselves when it is missing.
-
-Setting `VELOCE_UI_SNAPSHOT_DIR` while running `cargo test --test ui_smoke` writes a PNG of each interface surface to that directory.
-
-## Limitations
-
-- Decoded frames are downloaded from the hardware decoder and uploaded to the GPU, one copy each way. Direct surface sharing (IOSurface, DMA-BUF, D3D11 textures) is not implemented.
-- The first press of a new pattern can be a cold seek: speculative decoders are idle during ordinary playback, so at 4K, where the window holds under two seconds each way, the first `5s` hop after a while costs one decode. The presses that follow are prepared.
-- Speculation opens four extra decoders per local file and is not used for network streams.
-- Playback speed is limited by decode throughput. When the decoder cannot keep up, audio and video slow down together instead of dropping video.
-- Bitmap subtitles (PGS, VobSub) are listed but not rendered, and ASS styling and positioning are reduced to plain text.
-- The software-versus-hardware choice is a fixed rule tuned on one machine, not a measurement taken at run time.
-- Development and all measurements were done on macOS with VideoToolbox. The D3D11VA, NVDEC and VAAPI paths are selected at compile time and have not been exercised.
-- The audio output follows the default device chosen at launch.
-- Streams without a duration can only seek inside the buffered window.
-
-## License
+## License and credits
 
 Veloce is released under the [MIT License](LICENSE).
 
-The bundled typefaces, Inter and JetBrains Mono, are licensed under the SIL Open Font License 1.1. Their license texts are in `assets/fonts`.
+The screenshots and the recording show [Sintel](https://durian.blender.org/) (2010), © Blender Foundation, licensed under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). The bundled typefaces, Inter and JetBrains Mono, are licensed under the SIL Open Font License 1.1; their license texts are in `assets/fonts`.

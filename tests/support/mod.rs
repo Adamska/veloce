@@ -20,6 +20,8 @@ pub struct Stage {
     video: VideoPipeline,
     target: wgpu::Texture,
     time: f64,
+    /// Simulates a moving mouse so the control capsule stays visible during playback.
+    pub pointer_moving: bool,
 }
 
 impl Stage {
@@ -63,6 +65,7 @@ impl Stage {
             ctx,
             target,
             time: 0.0,
+            pointer_moving: false,
         })
     }
 
@@ -93,6 +96,16 @@ impl Stage {
             time: Some(self.time),
             ..Default::default()
         };
+        if self.pointer_moving {
+            let wiggle = if ((self.time * 30.0) as u64).is_multiple_of(2) {
+                0.0
+            } else {
+                1.0
+            };
+            input
+                .events
+                .push(egui::Event::PointerMoved(egui::pos2(200.0 + wiggle, 200.0)));
+        }
         input
             .viewports
             .entry(egui::ViewportId::ROOT)
@@ -175,6 +188,16 @@ impl Stage {
         let Some(directory) = std::env::var_os("VELOCE_UI_SNAPSHOT_DIR").map(PathBuf::from) else {
             return;
         };
+        self.capture()
+            .save_png(&directory.join(format!("{name}.png")))
+            .expect("snapshot is written");
+    }
+
+    pub fn size(&self) -> [u32; 2] {
+        self.size
+    }
+
+    pub fn capture(&self) -> Snapshot {
         let row = self.size[0] * 4;
         let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
@@ -205,13 +228,10 @@ impl Stage {
             .get_mapped_range()
             .expect("buffer is mapped")
             .to_vec();
-        let image = Snapshot {
+        Snapshot {
             width: self.size[0],
             height: self.size[1],
             rgba,
-        };
-        image
-            .save_png(&directory.join(format!("{name}.png")))
-            .expect("snapshot is written");
+        }
     }
 }
