@@ -2,10 +2,10 @@ use std::sync::atomic::Ordering;
 
 use super::{
     Command, DEMO_LOCATION, Player,
-    command::{self, SPEED_STEPS, SubtitleSelection},
+    command::{self, SubtitleSelection},
 };
 use crate::{
-    audio::MAX_VOLUME,
+    audio::{MAX_SPEED, MAX_VOLUME, MIN_SPEED},
     media::{MICROS_PER_SECOND, Micros},
 };
 
@@ -13,7 +13,7 @@ const MAX_DELAY: Micros = 5 * MICROS_PER_SECOND;
 
 impl Player {
     fn set_speed(&mut self, speed: f32) {
-        self.speed = speed.clamp(SPEED_STEPS[0], SPEED_STEPS[SPEED_STEPS.len() - 1]);
+        self.speed = command::round_speed(speed.clamp(MIN_SPEED, MAX_SPEED));
         self.controls().set_speed(self.speed);
         self.notify(format!("Speed {}", command::format_speed(self.speed)));
     }
@@ -57,6 +57,11 @@ impl Player {
     }
 
     pub fn execute(&mut self, command: Command) {
+        self.run(command);
+        self.track_settings();
+    }
+
+    fn run(&mut self, command: Command) {
         match command {
             Command::TogglePause if self.ended => {
                 self.seek_to(0);
@@ -71,6 +76,7 @@ impl Player {
             Command::StepSpeed { faster } => {
                 self.set_speed(command::step_speed(self.speed, faster))
             }
+            Command::AdjustSpeed(delta) => self.set_speed(command::nudge_speed(self.speed, delta)),
             Command::ResetSpeed => self.set_speed(1.0),
             Command::SetVolume(volume) => self.set_volume(volume),
             Command::AdjustVolume(delta) => {
@@ -124,7 +130,7 @@ impl Player {
                     self.start(first_new);
                 }
             }
-            Command::OpenDemo => self.execute(Command::Open(vec![DEMO_LOCATION.to_owned()])),
+            Command::OpenDemo => self.run(Command::Open(vec![DEMO_LOCATION.to_owned()])),
             Command::LoadSubtitles(path) => match self.subtitles.load_external(&path) {
                 Ok(name) => self.notify(format!("Subtitles: {name}")),
                 Err(error) => self.report_error(format!("{error:#}")),

@@ -6,7 +6,7 @@ use super::command::SubtitleSelection;
 use crate::{
     media::{MediaInfo, Micros, RawSubtitle, SubtitlePayload},
     subtitles::{
-        Cue, SubtitleStyle, SubtitleTrack, TrackSignature,
+        Cue, SubtitlePreference as Preference, SubtitleStyle, SubtitleTrack, TrackSignature,
         parser::{self, embedded_dialogue_text, strip_markup},
         sidecar::{self, stem_of},
     },
@@ -23,15 +23,6 @@ struct External {
     name: String,
     signature: TrackSignature,
     track: SubtitleTrack,
-}
-
-/// What the viewer last chose, carried from one file to the next.
-#[derive(Default)]
-enum Preference {
-    #[default]
-    Unset,
-    Off,
-    Track(TrackSignature),
 }
 
 #[derive(Default)]
@@ -56,6 +47,17 @@ impl SubtitleState {
         self.media_stem = None;
         self.selection = None;
         self.automatic = true;
+    }
+
+    /// The choice to carry into the next file: the track on screen, otherwise the last choice.
+    pub fn preference(&self) -> Preference {
+        self.selected_signature()
+            .map_or_else(|| self.preference.clone(), Preference::Track)
+    }
+
+    /// Restores a choice saved by an earlier run; the next file opened honours it.
+    pub fn restore(&mut self, preference: Preference) {
+        self.preference = preference;
     }
 
     /// Returns true when a track resembling the previous file's choice was selected.

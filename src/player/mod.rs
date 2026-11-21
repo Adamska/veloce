@@ -4,6 +4,7 @@ pub mod playlist;
 mod presenter;
 pub mod recent;
 pub mod session;
+pub mod settings;
 pub mod subtitles;
 mod transport;
 
@@ -15,10 +16,11 @@ use std::{
 pub use command::{Command, SubtitleSelection};
 pub use playlist::{DEMO_LOCATION, Playlist, PlaylistItem, RepeatMode};
 pub use recent::{RecentEntry, RecentFiles};
+pub use settings::{Preferences, Settings};
 pub use subtitles::SubtitleState;
 
 use crate::{
-    audio::{AudioControls, AudioEngine},
+    audio::{AudioControls, AudioEngine, MAX_SPEED, MAX_VOLUME, MIN_SPEED},
     engine::{CacheLimits, CacheSpan, PlaybackClock, TelemetrySnapshot},
     gpu::{Geometry, GpuCapabilities, VideoAdjustments},
     media::{MediaInfo, Micros},
@@ -39,6 +41,7 @@ pub struct Player {
     cache_limits: CacheLimits,
     pub playlist: Playlist,
     recent: RecentFiles,
+    settings: Settings,
     pub subtitles: SubtitleState,
     pub adjustments: VideoAdjustments,
     pub geometry: Geometry,
@@ -67,6 +70,7 @@ impl Player {
             cache_limits,
             playlist: Playlist::default(),
             recent: RecentFiles::default(),
+            settings: Settings::default(),
             subtitles: SubtitleState::default(),
             adjustments: VideoAdjustments::default(),
             geometry: Geometry::default(),
@@ -90,6 +94,36 @@ impl Player {
 
     pub fn set_recent(&mut self, recent: RecentFiles) {
         self.recent = recent;
+    }
+
+    /// Switches to persisted settings and applies what an earlier run saved.
+    pub fn set_settings(&mut self, settings: Settings, saved: Preferences) {
+        self.settings = settings;
+        self.speed = saved.speed.clamp(MIN_SPEED, MAX_SPEED);
+        self.controls().set_speed(self.speed);
+        self.volume = saved.volume.clamp(0.0, MAX_VOLUME);
+        self.controls().set_volume(self.volume);
+        self.subtitles.restore(saved.subtitles);
+    }
+
+    pub fn preferences(&self) -> Preferences {
+        Preferences {
+            speed: self.speed,
+            volume: self.volume,
+            subtitles: self.subtitles.preference(),
+        }
+    }
+
+    /// Writes any pending settings change immediately, for use when the app exits.
+    pub fn save_settings(&mut self) {
+        let preferences = self.preferences();
+        self.settings.update(&preferences);
+        self.settings.flush();
+    }
+
+    pub(super) fn track_settings(&mut self) {
+        let preferences = self.preferences();
+        self.settings.update(&preferences);
     }
 
     pub fn info(&self) -> Option<&MediaInfo> {

@@ -3,7 +3,10 @@ use winit::keyboard::{Key, ModifiersState, NamedKey};
 use crate::{
     player::{
         Command,
-        command::{AUDIO_DELAY_STEP, SEEK_LONG, SEEK_SHORT, SUBTITLE_DELAY_STEP, VOLUME_STEP},
+        command::{
+            AUDIO_DELAY_STEP, SEEK_LONG, SEEK_SHORT, SPEED_FINE_STEP, SUBTITLE_DELAY_STEP,
+            VOLUME_STEP,
+        },
     },
     ui::Action,
 };
@@ -56,6 +59,8 @@ fn character(character: &str, modifiers: ModifiersState, repeat: bool) -> Option
         "," => Some(Command::StepFrame { forward: false }),
         "]" => Some(Command::StepSpeed { faster: true }),
         "[" => Some(Command::StepSpeed { faster: false }),
+        "}" => Some(Command::AdjustSpeed(SPEED_FINE_STEP)),
+        "{" => Some(Command::AdjustSpeed(-SPEED_FINE_STEP)),
         "j" => Some(Command::AdjustAudioDelay(-AUDIO_DELAY_STEP)),
         "k" => Some(Command::AdjustAudioDelay(AUDIO_DELAY_STEP)),
         "g" => Some(Command::AdjustSubtitleDelay(-SUBTITLE_DELAY_STEP)),
@@ -148,6 +153,10 @@ mod tests {
             Some(Command::StepSpeed { faster: false }.into())
         );
         assert_eq!(press("=", none), Some(Command::ResetSpeed.into()));
+        assert_eq!(
+            press("}", ModifiersState::SHIFT),
+            Some(Command::AdjustSpeed(0.05).into())
+        );
         assert_eq!(press("F", none), Some(Action::ToggleFullscreen));
         assert_eq!(press("m", none), Some(Command::ToggleMute.into()));
         assert_eq!(press("s", none), Some(Command::CycleSubtitles.into()));

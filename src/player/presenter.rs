@@ -24,6 +24,7 @@ impl Player {
                     if self.subtitles.adopt_embedded(&info) {
                         self.notify(format!("Subtitles: {}", self.subtitles.label()));
                     }
+                    self.track_settings();
                     if let Some(session) = self.session.as_mut() {
                         session.info = Some(*info);
                     }
@@ -62,6 +63,7 @@ impl Player {
     }
 
     pub fn update(&mut self, refresh: Duration) -> Option<FrameSelection> {
+        self.settings.flush_due();
         self.handle_events();
         let shared = self.session.as_ref()?.shared.clone();
         let position = self.clock.tick(monotonic_nanos(), self.paused);

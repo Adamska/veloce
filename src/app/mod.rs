@@ -73,6 +73,12 @@ impl ApplicationHandler<AppEvent> for App {
         }
     }
 
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(viewport) = self.viewport.as_mut() {
+            viewport.player.save_settings();
+        }
+    }
+
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: AppEvent) {
         match (event, self.viewport.as_mut()) {
             (AppEvent::Open(paths), Some(viewport)) => {

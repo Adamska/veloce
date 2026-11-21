@@ -10,6 +10,7 @@ mod network_dialog;
 mod playlist;
 mod recent_list;
 mod scrubber;
+mod speed_control;
 mod subtitle_panel;
 pub mod theme;
 mod title;
@@ -157,7 +158,11 @@ impl Interface {
 
         let idle = now - self.last_activity > HIDE_AFTER_SECONDS;
         let wanted = player.has_session()
-            && (!idle || player.is_paused() || self.has_overlay() || view.displayed.is_none());
+            && (!idle
+                || player.is_paused()
+                || self.has_overlay()
+                || egui::Popup::is_any_open(&ctx)
+                || view.displayed.is_none());
         let opacity = ctx.animate_bool(Id::unique("hud visibility"), wanted);
         if let Some(area) = view.video_rect {
             let painter =

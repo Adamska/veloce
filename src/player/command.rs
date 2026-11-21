@@ -11,6 +11,8 @@ pub const SEEK_LONG: Micros = 30_000_000;
 pub const AUDIO_DELAY_STEP: Micros = 25_000;
 pub const SUBTITLE_DELAY_STEP: Micros = 50_000;
 pub const VOLUME_STEP: f32 = 0.05;
+/// Increment of the fine speed control (Shift+[ and Shift+], the speed popover).
+pub const SPEED_FINE_STEP: f32 = 0.05;
 pub const SPEED_STEPS: [f32; 12] = [
     0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0,
 ];
@@ -29,6 +31,7 @@ pub enum Command {
     StepFrame { forward: bool },
     SetSpeed(f32),
     StepSpeed { faster: bool },
+    AdjustSpeed(f32),
     ResetSpeed,
     SetVolume(f32),
     AdjustVolume(f32),
@@ -76,6 +79,17 @@ pub fn step_speed(current: f32, faster: bool) -> f32 {
     next.unwrap_or(current)
 }
 
+/// Moves `current` by `delta` onto the grid of `SPEED_FINE_STEP`, so 1.23 + 0.05 gives 1.25.
+pub fn nudge_speed(current: f32, delta: f32) -> f32 {
+    let steps = ((current + delta) / SPEED_FINE_STEP).round();
+    round_speed(steps * SPEED_FINE_STEP)
+}
+
+/// Rounds to hundredths, the precision shown, so repeated steps never drift to 1.2000001.
+pub fn round_speed(speed: f32) -> f32 {
+    (speed * 100.0).round() / 100.0
+}
+
 pub fn format_delay(delay: Micros) -> String {
     format!("{:+} ms", delay / 1_000)
 }
@@ -96,6 +110,19 @@ mod tests {
         assert_eq!(step_speed(1.1, false), 1.0);
         assert_eq!(step_speed(4.0, true), 4.0);
         assert_eq!(step_speed(0.25, false), 0.25);
+    }
+
+    #[test]
+    fn fine_speed_steps_land_on_the_twentieth_grid() {
+        assert_eq!(nudge_speed(1.0, SPEED_FINE_STEP), 1.05);
+        assert_eq!(nudge_speed(1.25, -SPEED_FINE_STEP), 1.2);
+        assert_eq!(nudge_speed(1.23, SPEED_FINE_STEP), 1.3);
+        let mut speed = 1.0;
+        for _ in 0..6 {
+            speed = nudge_speed(speed, SPEED_FINE_STEP);
+        }
+        assert_eq!(speed, 1.3);
+        assert_eq!(format_speed(speed), "1.30x");
     }
 
     #[test]

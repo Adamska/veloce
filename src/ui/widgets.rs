@@ -9,7 +9,7 @@ use crate::media::Micros;
 pub const ICON_BUTTON: f32 = 30.0;
 pub const HUD_RESERVE: f32 = 122.0;
 const LABEL_WIDTH: f32 = 88.0;
-const DRAWER_OPACITY: f32 = 1.14;
+pub const DRAWER_OPACITY: f32 = 1.14;
 
 pub fn format_timecode(time: Micros) -> String {
     let millis = time.max(0) / 1_000;

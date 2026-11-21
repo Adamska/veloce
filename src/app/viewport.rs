@@ -15,7 +15,7 @@ use winit::{
 use super::{AppEvent, files, icon, options::Options};
 use crate::{
     gpu::{GpuContext, VideoPipeline, snapshot},
-    player::{Command, Player, RecentFiles},
+    player::{Command, Player, RecentFiles, Settings},
     ui::{Action, EguiLayer, Interface},
 };
 
@@ -68,6 +68,8 @@ impl Viewport {
         let video = VideoPipeline::new(&gpu.device, gpu.format());
         let mut player = Player::new(gpu.capabilities, options.cache_limits());
         if let Some(directory) = files::data_dir() {
+            let (settings, saved) = Settings::persistent(directory.join("settings"));
+            player.set_settings(settings, saved);
             let waker = waker.clone();
             player.set_recent(RecentFiles::persistent(
                 directory.join("recent"),

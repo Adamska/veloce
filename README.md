@@ -63,7 +63,8 @@ The benchmark is a headless driver for the same engine the player uses, and it f
 ## Features
 
 - **Exact, instant jumps.** `±5 s` and `±30 s` from the keyboard, frame stepping, and a scrubber with chapter marks. Bursts of jumps cancel each other, so only the last one is decoded.
-- **Speed without chipmunks.** `0.25×` to `4.0×` with the pitch preserved, plus a silence skipper that speeds through quiet passages in lectures and podcasts.
+- **Speed without chipmunks.** `0.25×` to `4.0×` in steps as fine as `0.05×`, with the pitch preserved, plus a silence skipper that speeds through quiet passages in lectures and podcasts.
+- **Remembers your setup.** Speed, volume and the subtitle language you picked are restored on the next launch.
 - **Picture.** Hardware or threaded software decoding, 8 and 10-bit video straight to the GPU, BT.601/709/2020, HDR10 and HLG tone mapping, grading, sharpening, deinterlacing, aspect, crop, zoom, pan, rotation and mirroring.
 - **Sound.** Multiple audio tracks, a 10-band equalizer with presets, volume up to 200 % and audio delay in 25 ms steps.
 - **Subtitles.** Embedded and external tracks, sidecar files such as `Movie.fr.srt` picked up automatically, delay in 50 ms steps, adjustable size, position and backdrop.
@@ -106,8 +107,8 @@ The full design, including memory budgets, the seek protocol and the decoder sel
 
 ## Engineering highlights
 
-- **About 11,800 lines of Rust in 87 modules**, none longer than 250 lines, with no `unwrap()` outside tests.
-- **100 headless tests**: offscreen GPU rendering including HDR10 tone mapping, an FFmpeg decode and seek round trip, the player end to end, pitch preservation across speeds, A/V marker alignment, and a layout pass over every interface surface.
+- **About 12,200 lines of Rust in 89 modules**, none longer than 250 lines, with no `unwrap()` outside tests.
+- **106 headless tests**: offscreen GPU rendering including HDR10 tone mapping, an FFmpeg decode and seek round trip, the player end to end, pitch preservation across speeds, A/V marker alignment, and a layout pass over every interface surface.
 - **Correctness enforced by the benchmark.** It fails on any frame that is not the exact target, and on any gap in the decoded window.
 - **Concurrency without stalls.** Every seek takes a fresh epoch and is decided atomically, so frames and audio from an abandoned seek are recognized and dropped. Audio reaches the output callback through a lock-free single-producer ring, and the clock reaches the render thread through a seqlock.
 - **Measured, not assumed.** Profiling showed VideoToolbox about nine times slower than FFmpeg's frame-threaded decoder for 1080p H.264 on an M1 Max, so the decoder is chosen per file.
@@ -174,8 +175,9 @@ cargo test                                # headless test suite
 | `Left` / `Right` | Jump 5 s back / forward |
 | `Shift` + `Left` / `Right` | Jump 30 s back / forward |
 | `,` / `.` | Previous / next frame |
-| `[` / `]` | Slower / faster (0.25× to 4.0×) |
-| `=` | Reset speed to 1.0× |
+| `[` / `]` | Slower / faster through the presets (0.25× to 4.0×) |
+| `Shift` + `[` / `]` | Slower / faster by 0.05× (click the speed in the control bar for a slider) |
+| `=` | Reset speed to 1.0× (also double-click the speed) |
 | `Up` / `Down` | Volume up / down (to 200 %) |
 | `M` | Mute |
 | `F` | Fullscreen (also double-click) |

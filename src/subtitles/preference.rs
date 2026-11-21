@@ -52,6 +52,22 @@ pub struct TrackSignature {
     pub ordinal: usize,
 }
 
+/// What the viewer last chose, carried from one file to the next and across restarts.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum SubtitlePreference {
+    #[default]
+    Unset,
+    Off,
+    Track(TrackSignature),
+}
+
+/// The canonical spelling of a tag such as `forced`, for signatures read back from disk.
+pub fn tag_named(name: &str) -> Option<&'static str> {
+    TAGS.iter()
+        .map(|(tag, _)| *tag)
+        .find(|tag| *tag == name.trim())
+}
+
 pub fn normalize_language(code: &str) -> Option<&'static str> {
     let code = code.trim().to_lowercase();
     LANGUAGES

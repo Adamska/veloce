@@ -6,10 +6,10 @@ use super::{
     filters_panel::Tab,
     icons::Icon,
     scrubber::{self, ScrubberModel},
-    theme,
+    speed_control, theme,
     widgets::{capsule, format_timecode, icon_button},
 };
-use crate::player::{Command, command::format_speed};
+use crate::player::Command;
 
 const MAX_WIDTH: f32 = 940.0;
 const COMPACT_BELOW: f32 = 850.0;
@@ -46,37 +46,6 @@ fn transport(ui: &mut Ui, view: &ViewContext<'_>, compact: bool, actions: &mut V
             .duration()
             .map_or_else(|| "LIVE".to_owned(), format_timecode);
         ui.label(mono(format!("/ {total}"), theme::TEXT_DIM));
-    }
-}
-
-fn speed_stepper(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>) {
-    if icon_button(ui, Icon::Plus, "Faster (])", false).clicked() {
-        actions.push(Command::StepSpeed { faster: true }.into());
-    }
-    let boosted = view.player.is_skipping_silence();
-    let shown = if boosted {
-        view.player.effective_speed()
-    } else {
-        view.player.speed()
-    };
-    let color = if boosted {
-        theme::WARNING
-    } else if (shown - 1.0).abs() > 1e-3 {
-        theme::ACCENT
-    } else {
-        theme::TEXT
-    };
-    let label = RichText::new(format_speed(shown))
-        .font(theme::mono(12.0))
-        .color(color);
-    let reset = egui::Button::new(label)
-        .frame(false)
-        .min_size([46.0, 22.0].into());
-    if ui.add(reset).on_hover_text("Reset speed (=)").clicked() {
-        actions.push(Command::ResetSpeed.into());
-    }
-    if icon_button(ui, Icon::Minus, "Slower ([)", false).clicked() {
-        actions.push(Command::StepSpeed { faster: false }.into());
     }
 }
 
@@ -170,7 +139,7 @@ fn tools(
         actions.push(Command::ToggleMute.into());
     }
     ui.add_space(4.0);
-    speed_stepper(ui, view, actions);
+    speed_control::stepper(ui, view, actions);
 }
 
 pub fn show(

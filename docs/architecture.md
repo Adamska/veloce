@@ -97,9 +97,11 @@ After a seek the clock holds the target until audio belonging to the new epoch i
 | `src/ui` | Control capsule, scrubber, drawers, inspector, toasts, theme |
 | `src/app` | Window, event loop, keyboard map, file handling, macOS document events |
 
-## Recent files and subtitle choice
+## Recent files, settings and subtitle choice
 
 The welcome screen lists the files played recently, newest first, and hides any that no longer exist on disk. `player::RecentFiles` keeps the list in memory and, in the app only, in a plain text file: `~/Library/Application Support/Veloce/recent` on macOS, `%APPDATA%\Veloce\recent` on Windows and `~/.local/share/veloce/recent` on Linux. Whether each file still exists is checked on a background thread, so an unreachable network volume never blocks the interface; the screen repaints when the check finishes. Tests use the in-memory list and never touch the user's history.
+
+Playback speed, volume and the subtitle choice are saved by `player::Settings` to a `settings` file next to `recent`, one `key value` pair per line. A change is written at once, and later changes at most every half second (dragging the volume slider changes it every frame); the last change is written when the app exits, including through the macOS application menu, which ends the process without dropping the player. Tests keep these settings in memory too.
 
 The subtitle choice carries over from one file to the next. `subtitles::TrackSignature` describes a track by language, title, flags (forced, SDH, signs, commentary) and position. ISO 639 codes and language names are normalized, so `fre`, `fr` and `French` match, and the language of a sidecar file is read from its name after the media stem (`Movie.fr.forced.srt`). When a file opens, the track with the best score is selected, across embedded tracks and sidecar files. Turning subtitles off is remembered too, and a choice the viewer makes while the file is loading is never overridden.
 
