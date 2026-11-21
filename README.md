@@ -176,7 +176,7 @@ cargo test                                # headless test suite
 | `Shift` + `Left` / `Right` | Jump 30 s back / forward |
 | `,` / `.` | Previous / next frame |
 | `[` / `]` | Slower / faster through the presets (0.25× to 4.0×) |
-| `Shift` + `[` / `]` | Slower / faster by 0.05× (click the speed in the control bar for a slider) |
+| `Shift` + `[` / `]` | Slower / faster by 0.05× (also Shift-click on − / +; click the speed in the control bar for a slider) |
 | `=` | Reset speed to 1.0× (also double-click the speed) |
 | `Up` / `Down` | Volume up / down (to 200 %) |
 | `M` | Mute |

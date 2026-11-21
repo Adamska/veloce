@@ -75,10 +75,28 @@ fn popover(ui: &mut Ui, speed: f32, actions: &mut Vec<Action>) {
     );
 }
 
-pub fn stepper(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>) {
-    if icon_button(ui, Icon::Plus, "Faster (])", false).clicked() {
-        actions.push(Command::StepSpeed { faster: true }.into());
+/// A click moves to the next preset, a Shift-click by `SPEED_FINE_STEP`.
+fn step_button(ui: &mut Ui, faster: bool, actions: &mut Vec<Action>) {
+    let (icon, hint) = if faster {
+        (Icon::Plus, "Faster (]), Shift-click for +0.05")
+    } else {
+        (Icon::Minus, "Slower ([), Shift-click for -0.05")
+    };
+    if icon_button(ui, icon, hint, false).clicked() {
+        let fine = ui.input(|input| input.modifiers.shift);
+        actions.push(
+            match (fine, faster) {
+                (true, true) => Command::AdjustSpeed(SPEED_FINE_STEP),
+                (true, false) => Command::AdjustSpeed(-SPEED_FINE_STEP),
+                (false, _) => Command::StepSpeed { faster },
+            }
+            .into(),
+        );
     }
+}
+
+pub fn stepper(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>) {
+    step_button(ui, true, actions);
     let speed = view.player.speed();
     let boosted = view.player.is_skipping_silence();
     let shown = if boosted {
@@ -111,7 +129,5 @@ pub fn stepper(ui: &mut Ui, view: &ViewContext<'_>, actions: &mut Vec<Action>) {
         .frame(capsule(DRAWER_OPACITY))
         .close_behavior(PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| popover(ui, speed, actions));
-    if icon_button(ui, Icon::Minus, "Slower ([)", false).clicked() {
-        actions.push(Command::StepSpeed { faster: false }.into());
-    }
+    step_button(ui, false, actions);
 }
