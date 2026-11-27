@@ -98,6 +98,17 @@ pub fn format_speed(speed: f32) -> String {
     format!("{speed:.2}x")
 }
 
+/// A playback position as `m:ss`, or `h:mm:ss` past the hour.
+pub fn format_clock(position: Micros) -> String {
+    let seconds = position.max(0) / 1_000_000;
+    let (hours, minutes, seconds) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,5 +142,8 @@ mod tests {
         assert_eq!(format_delay(-150_000), "-150 ms");
         assert_eq!(format_delay(0), "+0 ms");
         assert_eq!(format_speed(1.5), "1.50x");
+        assert_eq!(format_clock(65_900_000), "1:05");
+        assert_eq!(format_clock(3_723_000_000), "1:02:03");
+        assert_eq!(format_clock(-1), "0:00");
     }
 }

@@ -97,11 +97,15 @@ After a seek the clock holds the target until audio belonging to the new epoch i
 | `src/ui` | Control capsule, scrubber, drawers, inspector, toasts, theme |
 | `src/app` | Window, event loop, keyboard map, file handling, macOS document events |
 
-## Recent files, settings and subtitle choice
+## Recent files, settings, resume and logs
 
 The welcome screen lists the files played recently, newest first, and hides any that no longer exist on disk. `player::RecentFiles` keeps the list in memory and, in the app only, in a plain text file: `~/Library/Application Support/Veloce/recent` on macOS, `%APPDATA%\Veloce\recent` on Windows and `~/.local/share/veloce/recent` on Linux. Whether each file still exists is checked on a background thread, so an unreachable network volume never blocks the interface; the screen repaints when the check finishes. Tests use the in-memory list and never touch the user's history.
 
 Playback speed, volume and the subtitle choice are saved by `player::Settings` to a `settings` file next to `recent`, one `key value` pair per line. A change is written at once, and later changes at most every half second (dragging the volume slider changes it every frame); the last change is written when the app exits, including through the macOS application menu, which ends the process without dropping the player. Tests keep these settings in memory too.
+
+`player::Resume` keeps where playback stopped, per file, in a `resume` file next to `settings`, along with the queue that was open and whether it was paused. A file closed within 5 s of its start or 10 s of its end is forgotten, so finished films start over. The player saves the open file's position when it closes or switches files, every 5 s while it runs (a crash loses at most that) and on exit. On a launch without files, `Player::restore_session` reopens that queue; whichever way a file is opened, `Session::open` gets its saved position as the start target, so the first frame shown is the exact one where playback stopped, never a nearby keyframe.
+
+`app::logging` sends every record to stderr and to `veloce.log` (`~/Library/Logs/Veloce` on macOS, `$XDG_STATE_HOME/veloce` or `~/.local/state/veloce` on Linux, `%LOCALAPPDATA%\Veloce\Logs` on Windows), with UTC timestamps; a log over 4 MiB is moved to `veloce.old.log` at launch. A panic hook writes the panicking thread, location and backtrace. Each run also creates and locks a `running-<pid>` marker that it deletes on a clean exit: at launch, a marker that can be locked belonged to a run that crashed, was force quit or lost power, which is logged and shown as a warning. Markers of other instances still running stay locked and are left alone.
 
 The subtitle choice carries over from one file to the next. `subtitles::TrackSignature` describes a track by language, title, flags (forced, SDH, signs, commentary) and position. ISO 639 codes and language names are normalized, so `fre`, `fr` and `French` match, and the language of a sidecar file is read from its name after the media stem (`Movie.fr.forced.srt`). When a file opens, the track with the best score is selected, across embedded tracks and sidecar files. Turning subtitles off is remembered too, and a choice the viewer makes while the file is loading is never overridden.
 

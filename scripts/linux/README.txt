@@ -26,6 +26,8 @@ Shortcuts: Space play/pause, Left/Right jump 5 s (Shift for 30 s), [ and ] chang
 Shift+[ and Shift+] by 0.05, Ctrl+O open a file. Full list:
 https://github.com/Adamska/veloce#getting-started
 
-Settings and recent files are kept in ~/.local/share/veloce.
+Settings, recent files and playback positions are kept in ~/.local/share/veloce.
+The log is ~/.local/state/veloce/veloce.log (Ctrl+Shift+L opens its folder); please send it
+along with any bug report.
 To uninstall: rm ~/.local/bin/veloce ~/.local/share/applications/veloce.desktop
               ~/.local/share/icons/hicolor/256x256/apps/veloce.png

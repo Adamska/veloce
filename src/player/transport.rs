@@ -11,6 +11,7 @@ const CHAPTER_RESTART_WINDOW: Micros = 3 * MICROS_PER_SECOND;
 
 impl Player {
     pub(super) fn close(&mut self) {
+        self.remember_position();
         self.audio.attach(None);
         self.session = None;
         self.set_paused(true);
@@ -34,19 +35,26 @@ impl Player {
         };
         self.close();
         self.subtitles.reset();
+        let start = self.resume_point(&item.location);
+        log::info!("opening {}", item.location);
         let opened = Session::open(
             &item.location,
+            start,
             self.audio.sample_rate(),
             self.capabilities,
             self.cache_limits,
         );
         match opened {
             Ok(session) => {
-                self.clock.hold(0, session.shared.epoch());
+                self.clock.hold(start, session.shared.epoch());
+                self.position = start;
                 self.audio.attach(Some(session.shared.clone()));
                 self.session = Some(session);
                 self.ended = false;
                 self.set_paused(false);
+                if start > 0 {
+                    self.announce_resume(start);
+                }
                 if item.location != DEMO_LOCATION && !is_network_location(&item.location) {
                     self.subtitles.load_sidecars(Path::new(&item.location));
                     self.recent.record(Path::new(&item.location));

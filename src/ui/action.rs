@@ -16,6 +16,7 @@ pub enum Action {
     ToggleInspector,
     ToggleFullscreen,
     Snapshot,
+    RevealLog,
     Dismiss,
     Quit,
 }

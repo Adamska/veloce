@@ -12,10 +12,10 @@ use winit::{
     window::{Fullscreen, Window},
 };
 
-use super::{AppEvent, files, icon, options::Options};
+use super::{AppEvent, files, icon, logging, options::Options};
 use crate::{
     gpu::{GpuContext, VideoPipeline, snapshot},
-    player::{Command, Player, RecentFiles, Settings},
+    player::{Command, Player, RecentFiles, Resume, Settings},
     ui::{Action, EguiLayer, Interface},
 };
 
@@ -66,10 +66,14 @@ impl Viewport {
         let gpu = GpuContext::new(window.clone())?;
         let egui = EguiLayer::new(&window, &gpu.device, gpu.format());
         let video = VideoPipeline::new(&gpu.device, gpu.format());
+        log::info!("GPU adapter: {}", gpu.adapter_name);
         let mut player = Player::new(gpu.capabilities, options.cache_limits());
+        let (device, rate) = player.audio_device();
+        log::info!("audio output: {device} at {rate} Hz");
         if let Some(directory) = files::data_dir() {
             let (settings, saved) = Settings::persistent(directory.join("settings"));
             player.set_settings(settings, saved);
+            player.set_resume(Resume::persistent(directory.join("resume")));
             let waker = waker.clone();
             player.set_recent(RecentFiles::persistent(
                 directory.join("recent"),
@@ -86,8 +90,10 @@ impl Viewport {
             player.execute(Command::OpenDemo);
         } else if !options.locations.is_empty() {
             player.execute(Command::Open(options.locations.clone()));
+        } else {
+            player.restore_session();
         }
-        if options.paused && player.has_session() {
+        if options.paused && player.has_session() && !player.is_paused() {
             player.execute(Command::TogglePause);
         }
         Ok(Self {
@@ -201,6 +207,15 @@ impl Viewport {
                 self.window.set_fullscreen(target);
             }
             Action::Snapshot => self.take_snapshot(),
+            Action::RevealLog => match logging::log_path() {
+                Some(path) => {
+                    if let Err(error) = files::reveal(&path) {
+                        self.player
+                            .report_error(format!("Cannot show {}: {error}", path.display()));
+                    }
+                }
+                None => self.player.notify("No log directory on this system"),
+            },
             Action::Quit => event_loop.exit(),
             Action::Dismiss => {
                 if !self.interface.apply(&Action::Dismiss) {

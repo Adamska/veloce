@@ -2,6 +2,7 @@ mod files;
 mod frame;
 mod icon;
 mod input;
+pub mod logging;
 #[cfg(target_os = "macos")]
 mod macos;
 mod options;
@@ -38,6 +39,16 @@ pub fn run(arguments: Vec<OsString>) -> Result<()> {
         println!("veloce {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+    let mut log = logging::init(files::log_dir());
+    let ran = play(options, &mut log);
+    if let Err(error) = &ran {
+        log::error!("{error:#}");
+    }
+    log.finish();
+    ran
+}
+
+fn play(options: Options, log: &mut logging::LogSession) -> Result<()> {
     ffmpeg_source::initialize()?;
     let event_loop = EventLoop::<AppEvent>::with_user_event().build()?;
     #[cfg(target_os = "macos")]
@@ -47,25 +58,35 @@ pub fn run(arguments: Vec<OsString>) -> Result<()> {
         waker: event_loop.create_proxy(),
         viewport: None,
         modifiers: ModifiersState::empty(),
+        log,
     };
     event_loop.run_app(&mut app)?;
     Ok(())
 }
 
-struct App {
+struct App<'a> {
     options: Options,
     waker: EventLoopProxy<AppEvent>,
     viewport: Option<Viewport>,
     modifiers: ModifiersState,
+    log: &'a mut logging::LogSession,
 }
 
-impl ApplicationHandler<AppEvent> for App {
+impl ApplicationHandler<AppEvent> for App<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.viewport.is_some() {
             return;
         }
         match Viewport::new(event_loop, &self.options, self.waker.clone()) {
-            Ok(viewport) => self.viewport = Some(viewport),
+            Ok(mut viewport) => {
+                if self.log.crashed_before() {
+                    let reveal = input::shortcut("Shift+L");
+                    viewport.player.warn(format!(
+                        "Veloce did not close properly last time, the log has details ({reveal})"
+                    ));
+                }
+                self.viewport = Some(viewport);
+            }
             Err(error) => {
                 log::error!("failed to create the main window: {error:#}");
                 event_loop.exit();
@@ -75,8 +96,9 @@ impl ApplicationHandler<AppEvent> for App {
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(viewport) = self.viewport.as_mut() {
-            viewport.player.save_settings();
+            viewport.player.save_state();
         }
+        self.log.finish();
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: AppEvent) {

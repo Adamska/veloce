@@ -94,7 +94,7 @@ fn speed_and_volume_are_restored_after_a_restart() {
     first.execute(Command::SetVolume(0.0));
     first.execute(Command::SetSpeed(1.2));
     first.execute(Command::AdjustSpeed(0.05));
-    first.save_settings();
+    first.save_state();
     drop(first);
 
     let mut second = player();

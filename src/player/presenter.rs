@@ -3,15 +3,37 @@ use std::{
     time::Duration,
 };
 
-use super::Player;
+use super::{Player, command::format_clock, resume::END_MARGIN};
 use crate::{
     engine::{PipelineEvent, monotonic_nanos},
     gpu::FrameSelection,
-    media::{Micros, VideoFrame},
+    media::{MediaInfo, Micros, VideoFrame},
 };
 
 const END_TOLERANCE: Micros = 20_000;
 const BLEND_SPEED: f32 = 2.0;
+
+fn describe(info: &MediaInfo) -> String {
+    let duration = info
+        .duration
+        .map_or_else(|| "live".to_owned(), format_clock);
+    let video = info.video.as_ref().map_or_else(
+        || "no video".to_owned(),
+        |video| {
+            let (codec, format) = (&video.codec, &video.pixel_format);
+            format!(
+                "{codec} {}x{} {format} at {:.3} fps",
+                video.width, video.height, video.frame_rate
+            )
+        },
+    );
+    let audio = info.audio_tracks.len();
+    let subtitles = info.subtitle_tracks.len();
+    format!(
+        "opened {} ({}, {duration}): {video}, {audio} audio and {subtitles} subtitle tracks",
+        info.title, info.container
+    )
+}
 
 impl Player {
     fn handle_events(&mut self) {
@@ -25,8 +47,15 @@ impl Player {
                         self.notify(format!("Subtitles: {}", self.subtitles.label()));
                     }
                     self.track_settings();
+                    log::info!("{}", describe(&info));
+                    let beyond = info
+                        .duration
+                        .is_some_and(|end| self.position >= end - END_MARGIN);
                     if let Some(session) = self.session.as_mut() {
                         session.info = Some(*info);
+                    }
+                    if beyond && self.position > 0 {
+                        self.seek_to(0);
                     }
                 }
                 PipelineEvent::Subtitle(subtitle) => self.subtitles.ingest(subtitle),
@@ -63,7 +92,7 @@ impl Player {
     }
 
     pub fn update(&mut self, refresh: Duration) -> Option<FrameSelection> {
-        self.settings.flush_due();
+        self.checkpoint();
         self.handle_events();
         let shared = self.session.as_ref()?.shared.clone();
         let position = self.clock.tick(monotonic_nanos(), self.paused);

@@ -42,6 +42,42 @@ pub fn data_dir() -> Option<PathBuf> {
         .map(|data| data.join("veloce"))
 }
 
+/// Per-user directory for the log file, where each platform keeps application logs.
+pub fn log_dir() -> Option<PathBuf> {
+    let home = || std::env::var_os("HOME").map(PathBuf::from);
+    if cfg!(target_os = "macos") {
+        return home().map(|home| home.join("Library/Logs/Veloce"));
+    }
+    if cfg!(windows) {
+        return std::env::var_os("LOCALAPPDATA")
+            .map(|data| PathBuf::from(data).join("Veloce/Logs"));
+    }
+    std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| home().map(|home| home.join(".local/state")))
+        .map(|state| state.join("veloce"))
+}
+
+/// Shows `path` in the system file manager, selected where the platform allows it.
+pub fn reveal(path: &Path) -> std::io::Result<()> {
+    let mut command = if cfg!(target_os = "macos") {
+        let mut open = std::process::Command::new("open");
+        open.arg("-R").arg(path);
+        open
+    } else if cfg!(windows) {
+        let mut explorer = std::process::Command::new("explorer");
+        explorer.arg(format!("/select,{}", path.display()));
+        explorer
+    } else {
+        let mut open = std::process::Command::new("xdg-open");
+        open.arg(path.parent().unwrap_or(path));
+        open
+    };
+    let mut child = command.spawn()?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
+}
+
 pub fn pick_media() -> Option<Vec<String>> {
     let files = rfd::FileDialog::new()
         .set_title("Open media")

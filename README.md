@@ -64,7 +64,8 @@ The benchmark is a headless driver for the same engine the player uses, and it f
 
 - **Exact, instant jumps.** `±5 s` and `±30 s` from the keyboard, frame stepping, and a scrubber with chapter marks. Bursts of jumps cancel each other, so only the last one is decoded.
 - **Speed without chipmunks.** `0.25×` to `4.0×` in steps as fine as `0.05×`, with the pitch preserved, plus a silence skipper that speeds through quiet passages in lectures and podcasts.
-- **Remembers your setup.** Speed, volume and the subtitle language you picked are restored on the next launch.
+- **Picks up where you left off.** Quit and relaunch, and the same file reopens at the same frame, paused if it was. Every file remembers its own position, and speed, volume and the subtitle language carry over too.
+- **A log for when things go wrong.** Each run, every panic with its backtrace, and any run that crashed or was force quit are written to a log file (`Cmd/Ctrl` + `Shift` + `L` shows it).
 - **Picture.** Hardware or threaded software decoding, 8 and 10-bit video straight to the GPU, BT.601/709/2020, HDR10 and HLG tone mapping, grading, sharpening, deinterlacing, aspect, crop, zoom, pan, rotation and mirroring.
 - **Sound.** Multiple audio tracks, a 10-band equalizer with presets, volume up to 200 % and audio delay in 25 ms steps.
 - **Subtitles.** Embedded and external tracks, sidecar files such as `Movie.fr.srt` picked up automatically, delay in 50 ms steps, adjustable size, position and backdrop.
@@ -107,8 +108,8 @@ The full design, including memory budgets, the seek protocol and the decoder sel
 
 ## Engineering highlights
 
-- **About 12,200 lines of Rust in 89 modules**, none longer than 250 lines, with no `unwrap()` outside tests.
-- **106 headless tests**: offscreen GPU rendering including HDR10 tone mapping, an FFmpeg decode and seek round trip, the player end to end, pitch preservation across speeds, A/V marker alignment, and a layout pass over every interface surface.
+- **About 12,800 lines of Rust in 92 modules**, none longer than 250 lines, with no `unwrap()` outside tests.
+- **110 headless tests**: offscreen GPU rendering including HDR10 tone mapping, an FFmpeg decode and seek round trip, the player end to end, pitch preservation across speeds, A/V marker alignment, and a layout pass over every interface surface.
 - **Correctness enforced by the benchmark.** It fails on any frame that is not the exact target, and on any gap in the decoded window.
 - **Concurrency without stalls.** Every seek takes a fresh epoch and is decided atomically, so frames and audio from an abandoned seek are recognized and dropped. Audio reaches the output callback through a lock-free single-producer ring, and the clock reaches the render thread through a seqlock.
 - **Measured, not assumed.** Profiling showed VideoToolbox about nine times slower than FFmpeg's frame-threaded decoder for 1080p H.264 on an M1 Max, so the decoder is chosen per file.
@@ -136,7 +137,7 @@ Veloce is then in `/Applications`, Launchpad and Spotlight, and in Finder's **Op
 
 ### From source
 
-Requirements: Rust 1.88 or newer, the FFmpeg development libraries with `pkg-config`, and a C++ toolchain with libclang for the time-stretching library.
+Requirements: Rust 1.89 or newer, the FFmpeg development libraries with `pkg-config`, and a C++ toolchain with libclang for the time-stretching library.
 
 ```sh
 # Debian / Ubuntu
@@ -191,6 +192,7 @@ cargo test                                # headless test suite
 | `E` | Filters and equalizer |
 | `Cmd/Ctrl` + `I` | Codec and performance inspector |
 | `Cmd/Ctrl` + `L` | Playlist drawer |
+| `Cmd/Ctrl` + `Shift` + `L` | Show the log file (`~/Library/Logs/Veloce` on macOS, `~/.local/state/veloce` on Linux) |
 | `Cmd/Ctrl` + `O` | Open file |
 | `Cmd/Ctrl` + `U` | Open network stream |
 | `Cmd/Ctrl` + `S` | Save a PNG snapshot of the current frame to `~/Pictures/Veloce` |

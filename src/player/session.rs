@@ -13,7 +13,7 @@ use crate::{
         pipeline, speculation,
     },
     gpu::GpuCapabilities,
-    media::{MediaInfo, MediaSource},
+    media::{MediaInfo, MediaSource, Micros},
 };
 
 pub struct Session {
@@ -49,8 +49,10 @@ fn source_factory(
 }
 
 impl Session {
+    /// Starts decoding `location` with the first frame at `start`.
     pub fn open(
         location: &str,
+        start: Micros,
         sample_rate: u32,
         capabilities: GpuCapabilities,
         limits: CacheLimits,
@@ -63,7 +65,7 @@ impl Session {
         let shared = Arc::new(SessionShared::with_spare_lanes(
             limits,
             sample_rate,
-            0,
+            start,
             spare,
         ));
         let (sender, events) = crossbeam_channel::unbounded();

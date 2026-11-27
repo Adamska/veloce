@@ -19,6 +19,16 @@ pub fn primary_modifier(modifiers: ModifiersState) -> bool {
     }
 }
 
+/// How a shortcut with the platform's primary modifier reads, such as `Cmd+O` on macOS.
+pub fn shortcut(key: &str) -> String {
+    let modifier = if cfg!(target_os = "macos") {
+        "Cmd"
+    } else {
+        "Ctrl"
+    };
+    format!("{modifier}+{key}")
+}
+
 fn named(key: NamedKey, modifiers: ModifiersState, repeat: bool) -> Option<Action> {
     let seek = if modifiers.shift_key() {
         SEEK_LONG
@@ -40,8 +50,9 @@ fn named(key: NamedKey, modifiers: ModifiersState, repeat: bool) -> Option<Actio
     Some(command.into())
 }
 
-fn with_primary(character: &str) -> Option<Action> {
+fn with_primary(character: &str, shift: bool) -> Option<Action> {
     Some(match character {
+        "l" if shift => Action::RevealLog,
         "i" => Action::ToggleInspector,
         "s" => Action::Snapshot,
         "u" => Action::ShowNetworkDialog,
@@ -96,7 +107,9 @@ pub fn map(key: &Key, modifiers: ModifiersState, repeat: bool) -> Option<Action>
         Key::Character(text) => {
             let lowered = text.to_lowercase();
             if primary_modifier(modifiers) {
-                (!repeat).then(|| with_primary(&lowered)).flatten()
+                (!repeat)
+                    .then(|| with_primary(&lowered, modifiers.shift_key()))
+                    .flatten()
             } else if modifiers.alt_key() || modifiers.control_key() || modifiers.super_key() {
                 None
             } else {
